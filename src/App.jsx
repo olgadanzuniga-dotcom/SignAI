@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Menu } from "lucide-react";
-import { Routes, Route, useLocation, Outlet } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
 import { CSSTransition, TransitionGroup } from "react-transition-group";
 
 import Sidebar from "./components/Sidebar";
 import useScrolled from "./hooks/useScrolled";
+import { useThemeContext } from "./context/ThemeContext";
 
 import Home from "./components/Home.jsx";
 import Ajustes from "./components/pages/Ajustes";
@@ -32,8 +33,8 @@ function MainLayout({ sidebarOpen, tutorialActivo, setSidebarOpen }) {
       {showMenu && (
         <button
           onClick={() => setSidebarOpen(true)}
-          className="absolute top-4 left-8 z-50 bg-white dark:bg-[#151822] text-gray-800 dark:text-gray-100
-                     shadow-md rounded-md p-2 hover:bg-gray-200 dark:hover:bg-[#1e2230]
+          className="absolute top-4 left-8 z-50 bg-superficie text-texto
+                     shadow-md rounded-md p-2 hover:bg-superficie-2
                      transition flex items-center justify-center"
         >
           <Menu size={22} strokeWidth={2.2} />
@@ -44,16 +45,16 @@ function MainLayout({ sidebarOpen, tutorialActivo, setSidebarOpen }) {
       {showMenu && (
         <div
           className={`fixed top-0 right-0 z-30 flex items-center px-4 sm:px-8 py-3
-            bg-white/80 dark:bg-[#0b0f19]/80 backdrop-blur-md
-            border-b border-gray-200 dark:border-[#1f2833]
+            bg-fondo/80 backdrop-blur-md
+            border-b border-borde
             transition-all duration-500 ease-out
             ${sidebarOpen ? "left-60" : "left-0"}
             ${scrolled ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0 pointer-events-none"}`}
         >
           <button
             onClick={() => setSidebarOpen(true)}
-            className="bg-white dark:bg-[#151822] text-gray-800 dark:text-gray-100
-                       shadow-md rounded-md p-2 hover:bg-gray-200 dark:hover:bg-[#1e2230]
+            className="bg-superficie text-texto
+                       shadow-md rounded-md p-2 hover:bg-superficie-2
                        transition flex items-center justify-center"
           >
             <Menu size={22} strokeWidth={2.2} />
@@ -81,27 +82,15 @@ export default function App() {
   const [tutorialActivo, setTutorialActivo] = useState(() => !localStorage.getItem("tourSignAICompleted"));
   const location = useLocation();
   const nodeRef = useRef(null);
-  const prevDarkRef = useRef(document.documentElement.classList.contains("dark"));
+  const { isDark } = useThemeContext();
+  const prevDarkRef = useRef(isDark);
 
+  // Animación de zoom al cambiar de tema (reacciona al ThemeContext).
   useEffect(() => {
-    window.closeSidebar = () => setSidebarOpen(false);
-    return () => delete window.closeSidebar;
-  }, []);
-
-  useEffect(() => {
-    const observer = new MutationObserver((mutations) => {
-      for (let mutation of mutations) {
-        if (mutation.attributeName !== "class") continue;
-        const isDark = document.documentElement.classList.contains("dark");
-        if (isDark !== prevDarkRef.current && !animating) {
-          prevDarkRef.current = isDark;
-          triggerAnimation();
-        }
-      }
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, [animating]);
+    if (prevDarkRef.current === isDark || animating) return;
+    prevDarkRef.current = isDark;
+    triggerAnimation();
+  }, [isDark, animating]);
 
   const triggerAnimation = () => {
     setAnimating(true);
@@ -122,7 +111,7 @@ export default function App() {
   return (
     <div
       id="app-wrapper"
-      className="h-screen w-full bg-gray-100 dark:bg-[#0b0f19] text-gray-900 dark:text-gray-100 
+      className="h-screen w-full bg-fondo text-texto
                  transition-all duration-700 ease-in-out overflow-hidden flex"
     >
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
@@ -148,20 +137,24 @@ export default function App() {
                     <Route element={<MainLayout sidebarOpen={sidebarOpen} tutorialActivo={tutorialActivo} setSidebarOpen={setSidebarOpen} />}>
                       <Route path="/" element={<Home sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} onTutorialChange={setTutorialActivo} />} />
                       <Route path="/Ajustes" element={<Ajustes sidebarOpen={sidebarOpen} />} />
-                      <Route path="/Aprendizaje" element={<Aprendizaje sidebarOpen={sidebarOpen} />} />
+                      <Route path="/Aprendizaje" element={<Aprendizaje sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
                       <Route path="/Acerca" element={<Acerca sidebarOpen={sidebarOpen} />} />
                     </Route>
 
                     <Route element={<CleanLayout />}>
                       <Route path="/Deletreo" element={<Deletreo sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
                       <Route path="/Desafio" element={<Desafio sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
-                      <Route path="/Camara" element={<Camara sidebarOpen={sidebarOpen} />} />
+                      <Route path="/Camara" element={<Camara setSidebarOpen={setSidebarOpen} />} />
                       <Route path="/Aprender/:categoria" element={<LeccionRoute sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
                       <Route path="/Memorama" element={<Memorama sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
                       <Route path="/Juegos" element={<JuegosInteractivos sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
                       <Route path="/Aprender" element={<Aprender sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
                       <Route path="/Quiz" element={<Quiz sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
                     </Route>
+
+                    {/* Cualquier ruta desconocida (hash mal escrito, enlace
+                        viejo) volvía una pantalla en blanco sin salida. */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
 
                   </Routes>
                 </div>

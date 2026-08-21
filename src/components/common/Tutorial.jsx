@@ -185,15 +185,17 @@ export default function Tutorial({
   // Flecha: la posicionamos dinámicamente para que apunte hacia el centro del
   // spotlight, aunque el card haya sido desplazado por el clampeo.
   const cornerInset = 22;
+  // La punta toma el color de la tarjeta del propio token, no una copia a
+  // mano: así no puede quedarse del color anterior si `--superficie` cambia.
   const arrowVisual = {
     bottom:
-      "w-0 h-0 border-l-[12px] border-r-[12px] border-b-[14px] border-transparent border-b-white dark:border-b-[#151822]",
+      "w-0 h-0 border-l-[12px] border-r-[12px] border-b-[14px] border-transparent border-b-[rgb(var(--superficie))]",
     top:
-      "w-0 h-0 border-l-[12px] border-r-[12px] border-t-[14px] border-transparent border-t-white dark:border-t-[#151822]",
+      "w-0 h-0 border-l-[12px] border-r-[12px] border-t-[14px] border-transparent border-t-[rgb(var(--superficie))]",
     right:
-      "w-0 h-0 border-t-[12px] border-b-[12px] border-r-[14px] border-transparent border-r-white dark:border-r-[#151822]",
+      "w-0 h-0 border-t-[12px] border-b-[12px] border-r-[14px] border-transparent border-r-[rgb(var(--superficie))]",
     left:
-      "w-0 h-0 border-t-[12px] border-b-[12px] border-l-[14px] border-transparent border-l-white dark:border-l-[#151822]",
+      "w-0 h-0 border-t-[12px] border-b-[12px] border-l-[14px] border-transparent border-l-[rgb(var(--superficie))]",
   };
 
   let arrowStyle = null;
@@ -279,13 +281,13 @@ export default function Tutorial({
 
       <div
         ref={cardRef}
-        className={`absolute bg-white dark:bg-[#151822] text-gray-800 dark:text-gray-100 p-6 rounded-2xl shadow-2xl border border-gray-200 dark:border-[#1f2833] flex flex-col items-center text-center transition-opacity duration-300 ${
+        className={`absolute bg-superficie text-texto p-6 rounded-2xl shadow-2xl border border-borde flex flex-col items-center text-center transition-opacity duration-300 ${
           animarTexto ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
         style={cardStyle}
       >
         {currentStep.title && (
-          <h4 className="font-bold text-base sm:text-lg mb-2 text-indigo-600 dark:text-indigo-400">
+          <h4 className="font-bold text-base sm:text-lg mb-2 text-acento">
             {currentStep.title}
           </h4>
         )}
@@ -298,7 +300,7 @@ export default function Tutorial({
             <button
               onClick={finishTutorial}
               disabled={!animarTexto}
-              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-3 py-2 rounded-lg font-medium text-sm transition-all disabled:opacity-60"
+              className="text-sutil hover:text-texto px-3 py-2 rounded-lg font-medium text-sm transition-all disabled:opacity-60"
             >
               Saltar
             </button>
@@ -306,13 +308,13 @@ export default function Tutorial({
           <button
             onClick={avanzarPaso}
             disabled={!animarTexto}
-            className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white px-8 py-2.5 rounded-xl font-bold shadow-lg hover:shadow-indigo-500/30 transition-all disabled:opacity-60 disabled:cursor-default"
+            className="bg-acento hover:bg-acento-fuerte active:scale-95 text-acento-texto px-8 py-2.5 rounded-xl font-bold shadow-lg transition-all disabled:opacity-60 disabled:cursor-default"
           >
             {isLastStep ? "Entendido" : "Continuar"}
           </button>
         </div>
 
-        <div className="text-xs text-gray-400 dark:text-gray-500 mt-3">
+        <div className="text-xs text-sutil mt-3">
           {stepIndex + 1} / {steps.length}
         </div>
 

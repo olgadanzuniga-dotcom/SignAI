@@ -1,0 +1,14 @@
+Modelo: _cmp_dinamico  (9 clases, coords=image, split=por_sesion)
+Evaluacion: val (47 muestras, split por sesion)
+Accuracy global: 61.70%
+
+clase            n     acc   principales confusiones
+AGUA             4  100.0%   
+HOLA            25   32.0%   PERRO(10), AGUA(6), X(1)
+J                1  100.0%   
+PERRO            4  100.0%   
+Q                6  100.0%   
+RR               1    0.0%   PERRO(1)
+X                1  100.0%   
+Z                4  100.0%   
+Ñ                1  100.0%   

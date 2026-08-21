@@ -1,9 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../common/PageHeader";
 import Tutorial from "../../common/Tutorial";
 import PageLayout from "../../common/PageLayout";
+import GameOverCard from "../../common/GameOverCard";
+import ProgressHeader from "../../common/ProgressHeader";
+import useCerrarSidebar from "../../../hooks/useCerrarSidebar";
+import { barajar } from "../../../utils/aleatorio";
 
 const MEMORAMA_TUTORIAL_STEPS = [
   {
@@ -41,6 +45,12 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
   const [cards, setCards] = useState([]);
   const [selected, setSelected] = useState([]);
   const [blocked, setBlocked] = useState(false);
+  const [intentos, setIntentos] = useState(0);
+  const timeoutRef = useRef(null);
+
+  // Si el jugador sale a media comparación, el timer pendiente intentaría
+  // actualizar estado de un componente ya desmontado.
+  useEffect(() => () => clearTimeout(timeoutRef.current), []);
 
   const totalPairs = Math.floor(cards.length / 2);
   const matchedPairs = Math.floor(cards.filter((card) => card.matched).length / 2);
@@ -48,11 +58,9 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
   
   const juegoTerminado = totalPairs > 0 && matchedPairs === totalPairs;
 
-  useEffect(() => {
-    if (typeof setSidebarOpen === "function") {
-      setSidebarOpen(false);
-    }
+  useCerrarSidebar(setSidebarOpen);
 
+  useEffect(() => {
     const dataset = [
       { palabra: "ELEFANTE", img: elefanteImg, tipo: "objeto" },
       { palabra: "ELEFANTE", img: elefanteLSM, tipo: "seña" },
@@ -70,130 +78,123 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
       { palabra: "HAMBURGUESA", img: hamburguesaLSM, tipo: "seña" },
     ];
 
-    const shuffled = dataset
-      .sort(() => Math.random() - 0.5)
-      .map((item, index) => ({
-        ...item,
-        id: `card-${index}`,
-        flipped: false,
-        matched: false,
-      }));
+    const shuffled = barajar(dataset).map((item, index) => ({
+      ...item,
+      id: `card-${index}`,
+      flipped: false,
+      matched: false,
+    }));
 
     setCards(shuffled);
-  }, [setSidebarOpen]);
+  }, []);
+
+  // Marca las cartas de `indices` con `patch`, siempre creando objetos nuevos:
+  // React compara por referencia, así que mutar las cartas en sitio (o volver a
+  // pasar el mismo array) hace que se salte el re-render y el tablero se quede
+  // congelado a medio voltear.
+  const parchearCartas = (indices, patch) =>
+    setCards((prev) =>
+      prev.map((card, i) => (indices.includes(i) ? { ...card, ...patch } : card))
+    );
 
   const handleFlip = (index) => {
     if (blocked || cards[index].flipped || cards[index].matched) return;
 
-    const newCards = [...cards];
-    newCards[index].flipped = true;
-    setCards(newCards);
+    parchearCartas([index], { flipped: true });
 
     const newSelected = [...selected, index];
     setSelected(newSelected);
 
     if (newSelected.length === 2) {
       setBlocked(true);
+      setIntentos((n) => n + 1);
       const [firstIdx, secondIdx] = newSelected;
+      const acierto = cards[firstIdx].palabra === cards[secondIdx].palabra;
 
-      if (cards[firstIdx].palabra === cards[secondIdx].palabra) {
-        setTimeout(() => {
-          newCards[firstIdx].matched = true;
-          newCards[secondIdx].matched = true;
-          setCards(newCards);
+      timeoutRef.current = setTimeout(
+        () => {
+          parchearCartas(
+            [firstIdx, secondIdx],
+            acierto ? { matched: true } : { flipped: false }
+          );
           setSelected([]);
           setBlocked(false);
-        }, 600);
-      } else {
-        setTimeout(() => {
-          newCards[firstIdx].flipped = false;
-          newCards[secondIdx].flipped = false;
-          setCards(newCards);
-          setSelected([]);
-          setBlocked(false);
-        }, 1000);
-      }
+        },
+        acierto ? 600 : 1000
+      );
     }
   };
 
   const reiniciarJuego = () => {
-    const newCards = cards
-      .map(card => ({ ...card, flipped: false, matched: false }))
-      .sort(() => Math.random() - 0.5);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    const newCards = barajar(
+      cards.map((card) => ({ ...card, flipped: false, matched: false }))
+    );
     setCards(newCards);
     setSelected([]);
     setBlocked(false);
+    setIntentos(0);
   };
 
   return (
     <PageLayout
       className="min-h-screen overflow-hidden"
-      contentClassName="items-center pt-14 pb-10 px-4 sm:px-6 lg:px-8 2xl:px-12 text-gray-900 dark:text-gray-100"
+      contentClassName="items-center pt-14 pb-10 px-4 sm:px-6 lg:px-8 2xl:px-12 text-texto"
     >
       <PageHeader />
 
       <div className="z-10 w-full max-w-6xl 2xl:max-w-[1500px] px-4 sm:px-6 2xl:px-8 flex flex-col items-center">
         
         {juegoTerminado ? (
-          <motion.div 
-            initial={{ scale: 0.8, opacity: 0 }} 
-            animate={{ scale: 1, opacity: 1 }} 
-            className="bg-white dark:bg-[#151822] rounded-3xl p-8 sm:p-12 2xl:p-16 shadow-xl text-center mt-12 sm:mt-20 max-w-2xl 2xl:max-w-3xl w-full border border-gray-200 dark:border-gray-800"
+          <GameOverCard
+            titulo="¡Excelente!"
+            className="p-8 sm:p-12 2xl:p-16 shadow-xl mt-12 sm:mt-20 max-w-2xl 2xl:max-w-3xl w-full border-borde"
+            onReiniciar={reiniciarJuego}
+            onSalir={() => navigate(-1)}
           >
-            <h2 className="text-4xl sm:text-5xl 2xl:text-6xl font-extrabold text-indigo-600 dark:text-indigo-400 mb-4 2xl:mb-6">¡Excelente!</h2>
-            <p className="text-lg sm:text-xl 2xl:text-2xl text-gray-600 dark:text-gray-300 mb-8 2xl:mb-10">
-              Encontraste los <strong className="text-indigo-500">{totalPairs}</strong> pares correctamente.
+            <p className="text-lg sm:text-xl 2xl:text-2xl text-sutil mb-8 2xl:mb-10">
+              Encontraste los <strong className="text-acento">{totalPairs}</strong> pares
+              en <strong className="text-acento">{intentos}</strong> intentos.
+              {intentos === totalPairs && " ¡Partida perfecta!"}
             </p>
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <button 
-                onClick={reiniciarJuego}
-                className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-200 px-8 py-3 rounded-xl font-bold text-lg hover:bg-indigo-200 dark:hover:bg-indigo-800 transition"
-              >
-                Jugar de nuevo
-              </button>
-              <button 
-                onClick={() => navigate(-1)}
-                className="bg-indigo-600 text-white dark:bg-indigo-500 dark:text-slate-50 px-8 py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-indigo-700 dark:hover:bg-indigo-400 transition"
-              >
-                Regresar al menú
-              </button>
-            </div>
-          </motion.div>
+          </GameOverCard>
         ) : (
           <>
-            <div data-tutorial="memorama-progreso" className="w-full mb-8 text-center flex flex-col items-center">
-              <p className="mt-2 text-sm sm:text-base text-gray-500 dark:text-gray-400 max-w-xl">
-                Encuentra las parejas entre la seña en LSM y el objeto correspondiente. Observa con atención antes de voltear la siguiente carta.
-              </p>
-
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-xs sm:text-sm">
-                <div className="px-3 py-1 rounded-full bg-white dark:bg-[#151822] border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-1.5">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500" />
-                  <span className="font-semibold text-gray-700 dark:text-gray-200">
-                    Pares encontrados: <span className="text-indigo-600 dark:text-indigo-400">{matchedPairs}</span> / {totalPairs || 7}
-                  </span>
-                </div>
-                <div className="px-3 py-1 rounded-full bg-white dark:bg-[#151822] border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-1.5">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  <span className="font-semibold text-gray-700 dark:text-gray-200">
-                    Cartas restantes: <span className="text-emerald-600 dark:text-emerald-400">{cards.filter((c) => !c.matched).length}</span>
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-4 w-full max-w-md mx-auto">
-                <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-[#1c212c] overflow-hidden shadow-inner">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-400 dark:from-indigo-400 dark:via-sky-400 dark:to-emerald-300 transition-all duration-500"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
-            </div>
+            <ProgressHeader
+              dataTutorial="memorama-progreso"
+              descripcion="Encuentra las parejas entre la seña en LSM y el objeto correspondiente. Observa con atención antes de voltear la siguiente carta."
+              progreso={progress}
+              pills={[
+                {
+                  punto: "bg-acento",
+                  contenido: (
+                    <>
+                      Pares encontrados: <span className="text-acento">{matchedPairs}</span> / {totalPairs || 7}
+                    </>
+                  ),
+                },
+                {
+                  punto: "bg-exito",
+                  contenido: (
+                    <>
+                      Cartas restantes: <span className="text-exito">{cards.filter((c) => !c.matched).length}</span>
+                    </>
+                  ),
+                },
+                {
+                  punto: "bg-[rgb(var(--cat-8))]",
+                  contenido: (
+                    <>
+                      Intentos: <span className="text-[rgb(var(--cat-8))]">{intentos}</span>
+                    </>
+                  ),
+                },
+              ]}
+            />
 
             <div className="w-full relative mt-2">
-              <div data-tutorial="memorama-tablero" className="relative bg-white dark:bg-[#151822] rounded-[2rem] shadow-xl border border-gray-200 dark:border-gray-800 p-4 sm:p-6 lg:p-8 2xl:p-10">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-7 gap-3 sm:gap-5 lg:gap-6 2xl:gap-8 mx-auto w-full">
+              <div data-tutorial="memorama-tablero" className="relative bg-superficie rounded-[2rem] shadow-xl border border-borde p-4 sm:p-6 lg:p-8 2xl:p-10">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-5 lg:gap-6 2xl:gap-8 mx-auto w-full">
                   {cards.map((card, index) => (
                     <motion.div
                       key={card.id}
@@ -218,8 +219,13 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
                           />
                         </div>
 
+                        {/* La cara de la carta es blanca en los dos temas a
+                            propósito: las ilustraciones de las señas son
+                            línea sobre transparente y sobre fondo oscuro
+                            desaparecen. Por eso aquí el texto también va a
+                            color fijo y no a `text-texto`. */}
                         <div
-                          className="absolute inset-0 backface-hidden rounded-2xl border-4 border-[#818cf8] bg-[#ffffff] dark:bg-[#ffffff] shadow-xl flex flex-col items-center justify-center p-4 overflow-hidden"
+                          className="absolute inset-0 backface-hidden rounded-2xl border-4 border-[rgb(var(--cat-1))] bg-white shadow-xl flex flex-col items-center justify-center p-4 overflow-hidden"
                           style={{ transform: "rotateY(180deg)" }}
                         >
                           <img
@@ -227,7 +233,7 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
                             alt={card.palabra}
                             className="w-3/4 h-3/4 object-contain mb-2"
                           />
-                          <p className={`font-bold text-xs sm:text-sm lg:text-base 2xl:text-lg uppercase tracking-wide text-center ${card.tipo === "seña" ? "text-[#6366f1]" : "text-[#4b5563] dark:text-[#d1d5db]"}`}>
+                          <p className={`font-bold text-xs sm:text-sm lg:text-base 2xl:text-lg uppercase tracking-wide text-center ${card.tipo === "seña" ? "text-[#4f46e5]" : "text-[#4b5563]"}`}>
                             {card.palabra}
                           </p>
 

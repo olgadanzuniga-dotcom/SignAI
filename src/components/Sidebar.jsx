@@ -1,119 +1,70 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 import { X, Hand, Settings, BookOpen, HelpCircle } from "lucide-react";
-import useTheme from "../hooks/useTheme";
 
+const ENLACES = [
+  { to: "/", end: true, icono: Hand, texto: "Traductor", tutorial: "traductor" },
+  { to: "/Ajustes", icono: Settings, texto: "Ajustes", tutorial: "ajustes" },
+  { to: "/Aprendizaje", icono: BookOpen, texto: "Aprendizaje", tutorial: "aprendizaje" },
+  { to: "/Acerca", icono: HelpCircle, texto: "Acerca de nosotros", tutorial: "acerca" },
+];
+
+const BASE =
+  "group flex items-center gap-3 rounded-lg px-4 py-2 font-medium transition-all duration-200";
+
+/**
+ * Menú lateral.
+ *
+ * Antes decidía cada color en JavaScript (`isDark ? "bg-[#11131b]" : ...`), lo
+ * que le hacía repintar en un `useEffect` y quedarse un instante con el tema
+ * anterior al cambiarlo. Ahora los colores son tokens, así que el tema lo
+ * resuelve CSS y este componente ya no sabe si es claro u oscuro.
+ */
 export default function Sidebar({ isOpen, setIsOpen }) {
-  const isDark = useTheme();
-
-  const base =
-    "group flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 font-medium";
-  const active =
-    "bg-indigo-500 text-white shadow-md scale-[1.02]";
-  const normalLight =
-    "text-gray-700 hover:bg-indigo-50 hover:text-indigo-600";
-  const normalDark =
-    "text-gray-300 hover:bg-[#1b1e27] hover:text-indigo-400";
-
   return (
     <aside
-      className={`
-        fixed top-0 left-0 h-full w-60
-        ${isDark ? "bg-[#11131b] border-r border-[#2a2f3b]" : "bg-white border-r border-gray-200"}
-        shadow-md flex flex-col justify-between z-40
-        transform transition-transform duration-300
-        ${isOpen ? "translate-x-0" : "-translate-x-full"}
-      `}
+      className={`fixed left-0 top-0 z-40 flex h-full w-60 flex-col justify-between
+                  border-r border-borde bg-superficie shadow-md
+                  transition-transform duration-300
+                  ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
     >
       <div>
-        <div
-          className={`flex justify-between items-center border-b px-4 py-4 ${
-            isDark ? "border-[#2a2f3b]" : "border-gray-200"
-          }`}
-        >
-          <h1
-            className={`text-lg font-bold ${
-              isDark ? "text-indigo-400" : "text-indigo-600"
-            }`}
-          >
-            SignAI
-          </h1>
+        <div className="flex items-center justify-between border-b border-borde px-4 py-4">
+          <h1 className="text-lg font-bold text-acento">SignAI</h1>
           <button
             onClick={() => setIsOpen(false)}
-            className={`text-2xl leading-none transition ${
-              isDark
-                ? "text-gray-400 hover:text-gray-200"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
+            aria-label="Cerrar menú"
+            className="leading-none text-sutil transition hover:text-texto"
           >
             <X size={22} strokeWidth={2.2} />
           </button>
         </div>
 
         <nav className="mt-4 flex flex-col space-y-2 px-2">
-          <NavLink
-            to="/"
-            end
-            data-tutorial="traductor"
-            className={({ isActive }) =>
-              `${base} ${isActive ? active : isDark ? normalDark : normalLight}`
-            }
-          >
-            <Hand
-              size={22}
-              strokeWidth={2}
-              className="transition-transform duration-300 group-hover:scale-110"
-            />
-            <span>Traductor</span>
-          </NavLink>
-
-          <NavLink
-            to="/Ajustes"
-            data-tutorial="ajustes"
-            className={({ isActive }) =>
-              `${base} ${isActive ? active : isDark ? normalDark : normalLight}`
-            }
-          >
-            <Settings
-              size={22}
-              strokeWidth={2}
-              className="transition-transform duration-300 group-hover:rotate-12"
-            />
-            <span>Ajustes</span>
-          </NavLink>
-
-          <NavLink
-            to="/Aprendizaje"
-            data-tutorial="aprendizaje"
-            className={({ isActive }) =>
-              `${base} ${isActive ? active : isDark ? normalDark : normalLight}`
-            }
-          >
-            <BookOpen
-              size={22}
-              strokeWidth={2}
-              className="transition-transform duration-300 group-hover:scale-110"
-            />
-            <span>Aprendizaje</span>
-          </NavLink>
-
-          <NavLink
-            to="/Acerca"
-            data-tutorial="acerca"
-            className={({ isActive }) =>
-              `${base} ${isActive ? active : isDark ? normalDark : normalLight}`
-            }
-          >
-            <HelpCircle
-              size={22}
-              strokeWidth={2}
-              className="transition-transform duration-300 group-hover:scale-110"
-            />
-            <span>Acerca de nosotros</span>
-          </NavLink>
+          {ENLACES.map(({ to, end, icono: Icono, texto, tutorial }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              data-tutorial={tutorial}
+              className={({ isActive }) =>
+                `${BASE} ${
+                  isActive
+                    ? "scale-[1.02] bg-acento text-acento-texto shadow-md"
+                    : "text-sutil hover:bg-superficie-2 hover:text-acento"
+                }`
+              }
+            >
+              <Icono
+                size={22}
+                strokeWidth={2}
+                className="transition-transform duration-300 group-hover:scale-110"
+              />
+              <span>{texto}</span>
+            </NavLink>
+          ))}
         </nav>
       </div>
-
     </aside>
   );
 }

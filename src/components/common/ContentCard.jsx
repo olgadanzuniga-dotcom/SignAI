@@ -1,5 +1,11 @@
 import React from "react";
 
+/**
+ * Tarjeta de contenido: la misma superficie, borde y radio que usa el resto de
+ * la app. Va lisa a propósito — la banda de color en el canto queda reservada a
+ * las tarjetas que se eligen (ver `CategoriaCard`), para que ahí signifique algo
+ * en vez de ser decoración repetida en cada caja.
+ */
 export default function ContentCard({
   children,
   className = "",
@@ -17,7 +23,7 @@ export default function ContentCard({
 
   return (
     <Tag
-      className={`bg-white dark:bg-[#151822] border border-gray-200 dark:border-[#1f2833] rounded-2xl 2xl:rounded-3xl shadow-md 2xl:shadow-xl ${padCls} ${className}`}
+      className={`rounded-2xl border border-borde bg-superficie shadow-md 2xl:rounded-3xl 2xl:shadow-xl ${padCls} ${className}`}
       {...rest}
     >
       {children}

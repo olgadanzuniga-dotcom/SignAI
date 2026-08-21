@@ -5,6 +5,10 @@ import { palabrasDeletreo as listaPalabras } from "../../../data/palabras";
 import PageHeader from "../../common/PageHeader";
 import Tutorial from "../../common/Tutorial";
 import PageLayout from "../../common/PageLayout";
+import GameOverCard from "../../common/GameOverCard";
+import ProgressHeader from "../../common/ProgressHeader";
+import useCerrarSidebar from "../../../hooks/useCerrarSidebar";
+import { barajar } from "../../../utils/aleatorio";
 
 const DELETREO_TUTORIAL_STEPS = [
   {
@@ -46,9 +50,7 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
   const [juegoTerminado, setJuegoTerminado] = useState(false);
   const [puntaje, setPuntaje] = useState(0);
 
-  useEffect(() => {
-    if (typeof setSidebarOpen === "function") setSidebarOpen(false);
-  }, [setSidebarOpen]);
+  useCerrarSidebar(setSidebarOpen);
 
   useEffect(() => {
     return () => {
@@ -67,7 +69,7 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
       caracter: letra,
       img: obtenerImagenLetra(letra),
     }));
-    const letrasRevueltas = [...letras].sort(() => Math.random() - 0.5);
+    const letrasRevueltas = barajar(letras);
 
     slotRefs.current = [];
     setLetrasDisponibles(letrasRevueltas);
@@ -190,66 +192,55 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
   return (
     <PageLayout
       className="h-full overflow-hidden"
-      contentClassName="items-center pt-14 pb-4 px-4 sm:px-6 lg:px-8 text-gray-900 dark:text-gray-100"
+      contentClassName="items-center pt-14 pb-4 px-4 sm:px-6 lg:px-8 text-texto"
     >
       <PageHeader />
 
       <div className="z-10 w-full max-w-5xl 2xl:max-w-[1400px] px-4 sm:px-6 2xl:px-10 flex flex-col items-stretch">
-        <div data-tutorial="deletreo-progreso" className="w-full mb-4 text-center flex flex-col items-center">
-          <p className="mt-2 text-sm sm:text-base text-gray-500 dark:text-gray-400 max-w-xl">
-            Arrastra las señas a los espacios para formar la palabra correcta. Puedes moverlas entre huecos o regresarlas arriba si te equivocas.
-          </p>
-
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-xs sm:text-sm">
-            <div className="px-3 py-1 rounded-full bg-white dark:bg-[#151822] border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-1.5">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500" />
-              <span className="font-semibold text-gray-700 dark:text-gray-200">
-                Nivel {Math.min(nivelActual + 1, listaPalabras.length)} / {listaPalabras.length}
-              </span>
-            </div>
-            <div className="px-3 py-1 rounded-full bg-white dark:bg-[#151822] border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-1.5">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <span className="font-semibold text-gray-700 dark:text-gray-200">
-                Aciertos: <span className="text-emerald-600">{puntaje}</span>
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-4 w-full max-w-md mx-auto">
-            <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-[#1c212c] overflow-hidden shadow-inner">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-400 transition-all duration-500"
-                style={{ width: `${progreso}%` }}
-              />
-            </div>
-          </div>
-        </div>
+        <ProgressHeader
+          dataTutorial="deletreo-progreso"
+          descripcion="Arrastra las señas a los espacios para formar la palabra correcta. Puedes moverlas entre huecos o regresarlas arriba si te equivocas."
+          progreso={progreso}
+          className="mb-4"
+          pills={[
+            {
+              punto: "bg-acento",
+              contenido: (
+                <>
+                  Nivel {Math.min(nivelActual + 1, listaPalabras.length)} / {listaPalabras.length}
+                </>
+              ),
+            },
+            {
+              punto: "bg-exito",
+              contenido: (
+                <>
+                  Aciertos: <span className="text-exito">{puntaje}</span>
+                </>
+              ),
+            },
+          ]}
+        />
 
         {juegoTerminado ? (
           <div className="flex-1 flex items-center justify-center">
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-white dark:bg-[#151822] rounded-3xl p-10 shadow-xl text-center border border-gray-200 dark:border-gray-800"
+            <GameOverCard
+              titulo="¡Juego Completado!"
+              tituloClassName="text-3xl sm:text-4xl font-extrabold text-acento mb-4"
+              className="p-10 shadow-xl border-borde"
+              onSalir={() => navigate(-1)}
             >
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-indigo-600 mb-4">¡Juego Completado!</h2>
-              <p className="text-xl sm:text-2xl text-gray-700 dark:text-gray-300 mb-6">
-                Acertaste <strong className="text-green-500 text-3xl">{puntaje}</strong> de {listaPalabras.length} palabras.
+              <p className="text-xl sm:text-2xl text-sutil mb-6">
+                Acertaste <strong className="text-exito text-3xl">{puntaje}</strong> de {listaPalabras.length} palabras.
               </p>
-              <button
-                onClick={() => navigate(-1)}
-                className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-indigo-700 transition"
-              >
-                Regresar al menú
-              </button>
-            </motion.div>
+            </GameOverCard>
           </div>
         ) : (
           <React.Fragment key={nivelActual}>
             <div
               ref={disponiblesRef}
               data-tutorial="deletreo-disponibles"
-              className="min-h-[180px] 2xl:min-h-[220px] w-full flex flex-wrap justify-center items-center gap-3 sm:gap-4 2xl:gap-6 mb-6 2xl:mb-8 rounded-3xl bg-white dark:bg-[#151822] border border-gray-200 dark:border-gray-800 shadow-xl p-5 sm:p-8 2xl:p-10"
+              className="min-h-[180px] 2xl:min-h-[220px] w-full flex flex-wrap justify-center items-center gap-3 sm:gap-4 2xl:gap-6 mb-4 xl:mb-6 2xl:mb-8 rounded-3xl bg-superficie border border-borde shadow-xl p-5 sm:p-6 xl:p-8 2xl:p-10"
             >
               <AnimatePresence>
                 {letrasDisponibles.map((letra) => (
@@ -270,7 +261,11 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
                     whileHover={{ scale: 1.05, y: -4 }}
                     whileTap={{ scale: 0.95 }}
                     whileDrag={{ scale: 1.1, zIndex: 50 }}
-                    className="cursor-grab active:cursor-grabbing bg-gray-50 dark:bg-[#1c212c] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-3 w-20 sm:w-24 lg:w-28 2xl:w-32 h-28 sm:h-32 lg:h-36 2xl:h-44 flex flex-col items-center justify-center hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-500 touch-none select-none"
+                    /* Cara blanca en los dos temas: la ilustración de la
+                       seña es línea oscura sobre transparente y sobre fondo
+                       oscuro no se ve. Misma excepción que las cartas del
+                       memorama. */
+                    className="cursor-grab active:cursor-grabbing bg-white rounded-2xl shadow-sm border border-borde p-3 w-24 sm:w-28 lg:w-32 xl:w-36 2xl:w-44 h-28 sm:h-32 lg:h-36 xl:h-40 2xl:h-52 flex flex-col items-center justify-center hover:shadow-md hover:border-acento touch-none select-none"
                   >
                     <img
                       src={letra.img}
@@ -284,27 +279,29 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
             </div>
 
             <div className="w-full relative mt-2 flex-1 flex flex-col items-center justify-start">
-              <div data-tutorial="deletreo-slots" className="relative w-full bg-white dark:bg-[#151822] rounded-[2rem] shadow-xl border border-gray-200 dark:border-gray-800 min-h-[220px] 2xl:min-h-[280px] p-5 sm:p-8 2xl:p-12 flex flex-col items-center justify-center">
+              <div data-tutorial="deletreo-slots" className="relative w-full bg-superficie rounded-[2rem] shadow-xl border border-borde min-h-[200px] xl:min-h-[220px] 2xl:min-h-[280px] p-5 sm:p-6 xl:p-8 2xl:p-12 flex flex-col items-center justify-center">
                 <div className="flex flex-wrap justify-center gap-4 z-10 relative">
                   {Array.from({ length: palabraObjetivo.length }).map((_, index) => {
                     const letra = letrasColocadas[index];
 
-                    let bgClass =
-                      "bg-white dark:bg-[#1c212c] border-gray-200 dark:border-gray-700";
+                    // Blanca siempre, por lo mismo que las fichas de arriba.
+                    // El resultado se marca con borde y halo en vez de teñir
+                    // el fondo, que apagaría el dibujo.
+                    let bgClass = "bg-white border-borde";
                     if (haRespondido && letra) {
                       const esCorrecta = letra.caracter === palabraObjetivo[index];
                       bgClass = esCorrecta
-                        ? "bg-green-50 border-green-400 ring-4 ring-green-100"
-                        : "bg-red-50 border-red-400 ring-4 ring-red-100";
+                        ? "bg-white border-exito ring-4 ring-exito/40"
+                        : "bg-white border-error ring-4 ring-error/40";
                     }
 
                     return (
                       <div
                         key={`slot-${index}`}
                         ref={(el) => (slotRefs.current[index] = el)}
-                        className="relative w-20 sm:w-24 lg:w-28 2xl:w-32 h-28 sm:h-32 lg:h-36 2xl:h-44 rounded-2xl group"
+                        className="relative w-24 sm:w-28 lg:w-32 xl:w-36 2xl:w-44 h-28 sm:h-32 lg:h-36 xl:h-40 2xl:h-52 rounded-2xl group"
                       >
-                        <div className="absolute inset-0 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-[#1c212c]/60 transition-colors group-hover:border-indigo-300 dark:group-hover:border-indigo-500 group-hover:bg-indigo-50/30 dark:group-hover:bg-indigo-500/10" />
+                        <div className="absolute inset-0 rounded-2xl border-2 border-dashed border-borde bg-superficie-2/60 transition-colors group-hover:border-acento group-hover:bg-acento-suave/50" />
 
                         <AnimatePresence>
                           {letra && (
@@ -338,10 +335,10 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
                                 <motion.span
                                   initial={{ opacity: 0, scale: 0.5 }}
                                   animate={{ opacity: 1, scale: 1 }}
-                                  className={`absolute -bottom-3 sm:-bottom-4 font-black text-xl sm:text-2xl px-3 py-1 rounded-lg shadow-sm bg-white ${
+                                  className={`absolute -bottom-3 sm:-bottom-4 font-black text-xl sm:text-2xl px-3 py-1 rounded-lg shadow-sm bg-superficie ${
                                     letra.caracter === palabraObjetivo[index]
-                                      ? "text-green-600 border border-green-200"
-                                      : "text-red-600 border border-red-200"
+                                      ? "text-exito border border-exito/40"
+                                      : "text-error border border-error/40"
                                   }`}
                                 >
                                   {letra.caracter}
@@ -360,12 +357,12 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
                     <motion.div
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="mt-10 text-center bg-indigo-50 dark:bg-indigo-900/20 px-8 py-3 rounded-2xl border border-indigo-100 dark:border-indigo-800"
+                      className="mt-10 text-center bg-acento-suave px-8 py-3 rounded-2xl border border-acento/25"
                     >
-                      <p className="text-indigo-500 dark:text-indigo-300 font-bold uppercase tracking-widest text-xs mb-1">
+                      <p className="text-acento font-bold uppercase tracking-widest text-xs mb-1">
                         La palabra es
                       </p>
-                      <p className="text-3xl sm:text-4xl font-black text-indigo-700 dark:text-indigo-300 tracking-widest">
+                      <p className="text-3xl sm:text-4xl font-black text-acento tracking-widest">
                         {palabraObjetivo}
                       </p>
                     </motion.div>

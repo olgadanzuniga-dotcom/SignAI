@@ -1,11 +1,36 @@
 export const palabrasDeletreo = ["AGUA", "MESA", "GATO", "CARRO"];
 
+// Señas que los modelos reconocen hoy (ver modelos/*/label_map.json):
+// estáticas = letras sin movimiento; dinámicas = palabras y letras con
+// movimiento. El modelo "unificado" reconoce ambas.
+export const senasEstaticas = new Set("ABCDEFGHILMNOPRSTUVWY".split(""));
+export const senasDinamicas = new Set(["AGUA", "HOLA", "PERRO", "J", "Q", "RR", "X", "Z", "Ñ"]);
+
+// Alfabeto LSM completo. Se define el alfabeto (cerrado) y no la lista de
+// palabras (abierta): así, al ampliar el vocabulario del modelo, las clases
+// nuevas se reconocen como palabras sin tocar este archivo.
+// Incluye la K aunque todavía no esté entrenada, y RR y Ñ, que son letras
+// propias del alfabeto aunque RR ocupe dos caracteres.
+export const letrasLSM = new Set([
+  ..."ABCDEFGHIJKLMNOPQRSTUVWXYZÑ".split(""),
+  "RR",
+]);
+
+// El traductor lo usa para decidir cómo encadenar cada seña confirmada: las
+// letras se pegan entre sí (deletreo) y las palabras van como token aparte.
+export const esLetra = (sena) => letrasLSM.has(String(sena || "").toUpperCase());
+
+// Rondas del Modo Desafío: solo señas que el modelo puede validar en vivo
+// (mezcla de palabras dinámicas y letras estáticas).
 export const palabrasDesafio = [
-  "HOLA", "PERRO", "AGUA", "MESA", "GATO",
-  "AMARILLO", "CASA", "LIBRO", "TIEMPO", "FAMILIA",
+  "HOLA", "B", "AGUA", "L", "PERRO",
+  "V", "U", "W", "R", "Y",
 ];
 
-export const respuestasIncorrectasQuiz = [
+// Distractores del Quiz. Se deduplican al exportar: la lista se escribió a
+// mano y tenía repetidos ("Puerta", "Ventana"), lo que hacía que una misma
+// pregunta pudiera mostrar dos opciones idénticas.
+const distractoresQuiz = [
   "Montaña","Libro","Ventana","Cielo","Computadora","Playa","Sombrero","Zapato","Árbol","Río",
   "Teléfono","Escuela","Fuego","Nube","Camisa","Lámpara","Silla","Mesa","Reloj","Puerta",
   "Bicicleta","Chocolate","Pelota","Jardín","Estrella","Café","Música","Martillo","Avión","Hospital",
@@ -27,3 +52,5 @@ export const respuestasIncorrectasQuiz = [
   "Hostal","Aeropuerto","Terminal","Puerto","Carretera","Autopista","Sendero","Montículo","Pradera","Bosque",
   "Selva","Desierto","Volcán","Lago","Laguna","Cascada","Acantilado","Valle","Cueva","Islote",
 ];
+
+export const respuestasIncorrectasQuiz = [...new Set(distractoresQuiz)];

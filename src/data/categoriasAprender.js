@@ -8,18 +8,18 @@
 const aItems = (labels) =>
   labels.map((label, i) => ({ id: `${label}-${i}`, label }));
 
-// 🔤 Abecedario (A-Z)
+// Abecedario (A-Z)
 export const abecedario = aItems(
   "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
 );
 
-// 🔢 Números
+// Números
 export const numeros = aItems([
   "0", "1", "2", "3", "4", "5",
   "6", "7", "8", "9", "10",
 ]);
 
-// 🎨 Colores
+// Colores
 export const colores = aItems([
   "Rojo",
   "Azul",
@@ -33,7 +33,7 @@ export const colores = aItems([
   "Naranja",
 ]);
 
-// 👋 Presentaciones personales
+// Presentaciones personales
 export const presentaciones = aItems([
   "Me llamo",
   "¿Cómo te llamas?",
@@ -45,7 +45,7 @@ export const presentaciones = aItems([
   "Él / Ella",
 ]);
 
-// 🙌 Saludos y despedidas
+// Saludos y despedidas
 export const saludos = aItems([
   "Hola",
   "Buenos días",
@@ -57,7 +57,7 @@ export const saludos = aItems([
   "Nos vemos",
 ]);
 
-// 📅 Días y tiempo
+// Días y tiempo
 export const dias = aItems([
   "Lunes",
   "Martes",
@@ -71,7 +71,7 @@ export const dias = aItems([
   "Ayer",
 ]);
 
-// 🍔 Comida y bebidas
+// Comida y bebidas
 export const comida = aItems([
   "Agua",
   "Leche",
@@ -85,7 +85,7 @@ export const comida = aItems([
   "Sopa",
 ]);
 
-// 🏠 Lugares
+// Lugares
 export const lugares = aItems([
   "Casa",
   "Escuela",
@@ -99,7 +99,7 @@ export const lugares = aItems([
   "Mercado",
 ]);
 
-// 🚗 Transporte y direcciones
+// Transporte y direcciones
 export const transporte = aItems([
   "Carro",
   "Autobús",

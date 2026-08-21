@@ -3,9 +3,11 @@ import ReactDOM from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import App from "./App";
 import ScrollToTop from "./components/ScrollToTop";
+import ErrorBoundary from "./components/common/ErrorBoundary";
+import { ThemeProvider } from "./context/ThemeContext";
 import "./index.css";
 
-// 🌙 Aplica el tema guardado ANTES de que React renderice algo
+// Aplica el tema guardado ANTES de que React renderice algo
 const savedTheme = localStorage.getItem("lsm_theme");
 const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
@@ -21,8 +23,12 @@ if (theme === "dark") {
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <HashRouter>
-      <ScrollToTop />
-      <App />
+      <ThemeProvider>
+        <ScrollToTop />
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </ThemeProvider>
     </HashRouter>
   </React.StrictMode>
 );

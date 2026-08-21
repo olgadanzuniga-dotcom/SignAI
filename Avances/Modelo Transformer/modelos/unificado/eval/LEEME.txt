@@ -1,0 +1,10 @@
+Estos reportes (reporte.txt, confusion.*) salieron de la corrida de MEDICION
+con --split sesion (val_acc honesto = 75.1%, sesiones retenidas).
+
+El signai_transformer.pth desplegado en esta carpeta es un REENTRENAMIENTO
+posterior con --split muestras (todas las sesiones en train, val con fuga solo
+como senal de early-stopping; su "val_acc=1.0" del feature_meta.json NO mide
+generalizacion).
+
+Para re-medir honestamente: py entrenar.py <nombre> --split sesion y luego
+py evaluar.py <nombre>.

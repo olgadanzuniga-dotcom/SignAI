@@ -1,11 +1,9 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import PageHeader from "../common/PageHeader";
 import Tutorial from "../common/Tutorial";
-import PageLayout from "../common/PageLayout";
-import ResponsiveContainer from "../common/ResponsiveContainer";
-import NavCard from "../common/NavCard";
+import CategoriaCard from "../common/CategoriaCard";
+import PantallaCuadricula from "../common/PantallaCuadricula";
+import useCerrarSidebar from "../../hooks/useCerrarSidebar";
 
 import memoramaImg from "../../assets/memorama.svg";
 import quizImg from "../../assets/quiz.svg";
@@ -43,11 +41,7 @@ export default function JuegosInteractivos({ sidebarOpen, setSidebarOpen }) {
   const navigate = useNavigate();
 
   // Cerramos el sidebar al entrar
-  useEffect(() => {
-    if (typeof setSidebarOpen === "function") {
-      setSidebarOpen(false);
-    }
-  }, [setSidebarOpen]);
+  useCerrarSidebar(setSidebarOpen);
 
   const juegos = [
     { title: "Memorama", img: memoramaImg, path: "/Memorama", tutorialKey: "juego-memorama" },
@@ -57,34 +51,26 @@ export default function JuegosInteractivos({ sidebarOpen, setSidebarOpen }) {
   ];
 
   return (
-    <PageLayout
-      contentClassName="items-center justify-start text-center text-gray-900 dark:text-gray-100 transition-colors duration-700 ease-in-out pt-10"
+    <PantallaCuadricula
+      titulo="Juegos"
+      subtitulo="Cuatro formas de practicar lo que ya sabes."
+      columnas="grid-cols-1 sm:grid-cols-2"
+      cuadriculaKey="juegos-cuadricula"
+      tutorial={
+        <Tutorial steps={JUEGOS_TUTORIAL_STEPS} storageKey="tourSignAI_juegos" />
+      }
     >
-      <PageHeader />
-
-      <ResponsiveContainer size="lg">
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.15 }}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-10 2xl:gap-14 mt-6 sm:mt-8 lg:mt-10 2xl:mt-16"
-        >
-          {juegos.map((game, index) => (
-            <NavCard
-              key={index}
-              title={game.title}
-              img={game.img}
-              tutorialKey={game.tutorialKey}
-              onClick={() => navigate(game.path)}
-            />
-          ))}
-        </motion.div>
-      </ResponsiveContainer>
-
-      <Tutorial
-        steps={JUEGOS_TUTORIAL_STEPS}
-        storageKey="tourSignAI_juegos"
-      />
-    </PageLayout>
+      {juegos.map((game, i) => (
+        <CategoriaCard
+          key={game.path}
+          titulo={game.title}
+          img={game.img}
+          tono={[1, 4, 6, 9][i] ?? 1}
+          variante="tarjeta"
+          tutorialKey={game.tutorialKey}
+          onClick={() => navigate(game.path)}
+        />
+      ))}
+    </PantallaCuadricula>
   );
 }

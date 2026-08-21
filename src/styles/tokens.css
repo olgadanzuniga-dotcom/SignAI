@@ -1,0 +1,114 @@
+/* ============================================================
+   SignAI — tokens de diseño
+   ------------------------------------------------------------
+   Un solo lugar donde vive el color. Los componentes usan nombres
+   con significado (`bg-superficie`, `text-sutil`) y el tema los
+   resuelve, en vez de repetir `bg-white dark:bg-[#151822]` en cada
+   archivo.
+
+   Los valores son canales RGB sueltos para que Tailwind pueda
+   aplicarles opacidad (`bg-superficie/60`).
+   ============================================================ */
+
+:root {
+  /* Superficies.
+     PROVISIONAL: neutro sin tinte, solo evitando el blanco y el negro
+     puros. El ambiente definitivo está sin decidir. */
+  --fondo: 242 242 244;
+  --superficie: 250 250 252;
+  --superficie-2: 236 236 240;
+  --borde: 224 224 230;
+
+  --texto: 24 24 28;
+  --sutil: 100 100 110;
+
+  /* Acento: lo pulsable y lo activo. El índigo de la marca. */
+  --acento: 79 70 229;
+  --acento-fuerte: 62 52 205; /* el hover del boton principal */
+  --acento-texto: 255 255 255;
+  --acento-suave: 238 238 253;
+
+  /* Semánticos: cada uno significa una cosa en el traductor */
+  --exito: 22 143 92; /* seña confirmada */
+  --aviso: 180 116 8; /* mantén la posición */
+  --error: 200 45 60; /* no se pudo reconocer */
+}
+
+.dark {
+  --fondo: 26 26 30;
+  --superficie: 35 35 40;
+  --superficie-2: 45 45 52;
+  --borde: 56 56 64;
+
+  --texto: 237 237 242;
+  --sutil: 156 156 168;
+
+  /* En oscuro el índigo se aclara: el mismo tono sobre fondo oscuro
+     pierde contraste y deja de leerse como pulsable. */
+  --acento: 129 140 248;
+  --acento-fuerte: 165 180 252; /* en oscuro el hover ACLARA, no oscurece */
+  --acento-texto: 15 18 28;
+  --acento-suave: 39 42 71;
+
+  --exito: 74 222 128;
+  --aviso: 251 191 36;
+  --error: 248 113 113;
+}
+
+/* -- La rampa de categorías ----------------------------------
+   Nueve tonos que arrancan en el índigo de la marca y recorren la
+   rueda de color a saltos parejos, saltándose la zona verde-amarilla
+   (que junto al índigo ensucia). Todos comparten intensidad, así que
+   ninguno grita por encima de otro: es lo que permite usar nueve
+   colores sin marear.
+
+   Y no son decorativos: **el orden de la rampa es el orden del
+   temario**. Al principio se lee como "colorido"; después se descubre
+   que indica por dónde vas.                                          */
+:root {
+  --cat-1: 79 70 229;   /* índigo — abecedario */
+  --cat-2: 109 60 224;  /* violeta — números   */
+  --cat-3: 139 52 214;  /* púrpura — colores   */
+  --cat-4: 166 43 196;  /* orquídea — presentaciones */
+  --cat-5: 194 42 155;  /* magenta — saludos   */
+  --cat-6: 209 47 107;  /* frambuesa — días    */
+  --cat-7: 209 85 47;   /* terracota — comida  */
+  --cat-8: 184 129 26;  /* ámbar — lugares     */
+  --cat-9: 14 143 134;  /* teal — transporte   */
+}
+
+/* Sobre fondo oscuro los mismos tonos se apagan; se suben un punto
+   para que la banda siga leyéndose con la misma fuerza. */
+.dark {
+  --cat-1: 129 122 245;
+  --cat-2: 152 111 240;
+  --cat-3: 176 104 232;
+  --cat-4: 199 96 222;
+  --cat-5: 219 95 186;
+  --cat-6: 231 100 145;
+  --cat-7: 231 129 95;
+  --cat-8: 212 165 74;
+  --cat-9: 61 183 173;
+}
+
+/* El foco se ve SIEMPRE y en todo. La app la usan personas sordas y
+   quien aprende con una mano en la cámara: navegar con teclado no es
+   un extra. Se dibuja con `outline` para que no altere el layout. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid rgb(var(--acento));
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+/* El degradado de la marca recorre el arranque de la rampa. Sale de los
+   mismos tonos que las tarjetas, asi que el titulo de la portada y las
+   barras de progreso pertenecen visiblemente al mismo sistema, en vez de
+   ser un degradado azul decidido aparte. */
+:root {
+  --degradado-marca: linear-gradient(
+    90deg,
+    rgb(var(--cat-1)),
+    rgb(var(--cat-3)),
+    rgb(var(--cat-5))
+  );
+}

@@ -7,7 +7,9 @@
   "dim_ff": 1024,
   "dropout": 0.15,
   "max_seq_len": 80,
-  "best_val_loss": 0.49708622694015503,
+  "coords": "image",
+  "split": "muestras",
+  "best_val_loss": 0.4936866760253906,
   "best_val_acc": 1.0,
-  "epoca": 106
+  "epoca": 103
 }

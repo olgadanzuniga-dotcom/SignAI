@@ -1,11 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // Servidor local de inferencia (Python). El mismo proceso sirve el video
-// MJPEG y los eventos por WebSocket. Cambia el puerto aquí si lo modificas
-// en server.py (SIGNAI_PORT).
-const HOST = "127.0.0.1:8765";
+// MJPEG y los eventos por WebSocket. El host se puede cambiar con
+// VITE_SIGNAI_HOST en .env (debe coincidir con SIGNAI_PORT del servidor).
+const HOST = import.meta.env.VITE_SIGNAI_HOST || "127.0.0.1:8765";
 const HTTP = `http://${HOST}`;
 const WS_URL = `ws://${HOST}/ws`;
+
+// Reintentos de conexión: backoff exponencial 1s → 8s. Tras DOWN_AFTER_ATTEMPTS
+// intentos fallidos seguidos se expone `serverDown` para que la UI avise al
+// usuario (los reintentos continúan en segundo plano).
+const RETRY_BASE_MS = 1000;
+const RETRY_MAX_MS = 8000;
+const DOWN_AFTER_ATTEMPTS = 6;
+
+// Pide al servidor que active un modelo. El servidor confirma después por WS
+// con un evento {tipo:"modelo"} dirigido a todos los clientes.
+function pedirModeloAlServidor(key) {
+  return fetch(`${HTTP}/modelo?modelo=${encodeURIComponent(key)}`, {
+    method: "POST",
+  }).catch((err) => {
+    console.warn("No se pudo cambiar el modelo en el servidor:", err);
+  });
+}
 
 /**
  * Conecta con el servidor de señas mientras el componente esté montado.
@@ -17,11 +34,25 @@ const WS_URL = `ws://${HOST}/ws`;
  * - `lastCommit`: última seña confirmada { letra, conf, id }. El `id` cambia
  *   en cada commit nuevo (útil como dependencia de efectos).
  * - `onCommit`: callback opcional que se llama en cada commit.
+ * - `serverDown`: true cuando llevamos varios intentos sin poder conectar.
+ * - `engineError`: mensaje del servidor cuando el motor esta conectado
+ *   pero no puede trabajar (tipicamente: no pudo abrir la camara).
  *
- * @param {{ enabled?: boolean, onCommit?: (c:{letra:string,conf:number,id:number})=>void }} opts
+ * El modelo activo es GLOBAL del servidor: si otra pantalla lo cambió, esta lo
+ * heredaría. `modeloPreferido` (uno o varios, por orden de preferencia) pide el
+ * primero que exista, una sola vez por conexión, para que cada pantalla arranque
+ * con el modelo que sabe interpretar sin bloquear el selector manual.
+ *
+ * @param {{ enabled?: boolean, modeloPreferido?: string|string[], onCommit?: (c:{letra:string,conf:number,id:number})=>void }} opts
  */
-export default function useSignServer({ enabled = true, onCommit } = {}) {
+export default function useSignServer({
+  enabled = true,
+  modeloPreferido,
+  onCommit,
+} = {}) {
   const [connected, setConnected] = useState(false);
+  const [serverDown, setServerDown] = useState(false);
+  const [engineError, setEngineError] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [status, setStatus] = useState({
     estado: "IDLE",
@@ -40,6 +71,14 @@ export default function useSignServer({ enabled = true, onCommit } = {}) {
   onCommitRef.current = onCommit;
   const commitSeq = useRef(0);
 
+  // Lista estable de preferencias (acepta string o array) para no re-disparar
+  // el efecto por una identidad de array nueva en cada render.
+  const preferidos = Array.isArray(modeloPreferido)
+    ? modeloPreferido.join("|")
+    : modeloPreferido || "";
+  const preferidosRef = useRef(preferidos);
+  preferidosRef.current = preferidos;
+
   useEffect(() => {
     if (!enabled) {
       setVideoUrl("");
@@ -49,13 +88,18 @@ export default function useSignServer({ enabled = true, onCommit } = {}) {
     let stopped = false;
     let ws = null;
     let reconnectTimer = null;
+    let intentosFallidos = 0;
+    let preferenciaAplicada = false;
 
     const connect = () => {
       if (stopped) return;
       ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
+        intentosFallidos = 0;
+        setServerDown(false);
         setConnected(true);
+        setEngineError("");
         // El servidor ya responde: ahora sí pedimos el stream MJPEG.
         // El cache-bust fuerza un <img> nuevo (consumidor nuevo) en cada
         // (re)conexión, evitando que quede pegado a un intento fallido.
@@ -65,7 +109,14 @@ export default function useSignServer({ enabled = true, onCommit } = {}) {
       ws.onclose = () => {
         setConnected(false);
         setVideoUrl(""); // el stream también murió; se repide al reconectar
-        if (!stopped) reconnectTimer = setTimeout(connect, 1000);
+        if (stopped) return;
+        intentosFallidos += 1;
+        if (intentosFallidos >= DOWN_AFTER_ATTEMPTS) setServerDown(true);
+        const delay = Math.min(
+          RETRY_BASE_MS * 2 ** (intentosFallidos - 1),
+          RETRY_MAX_MS
+        );
+        reconnectTimer = setTimeout(connect, delay);
       };
 
       ws.onerror = () => {
@@ -84,10 +135,29 @@ export default function useSignServer({ enabled = true, onCommit } = {}) {
         if (msg.tipo === "hello") {
           if (Array.isArray(msg.modelos)) setModelos(msg.modelos);
           if (msg.modelo) setModeloActual(msg.modelo);
+
+          // Una sola vez por conexión: si esta pantalla declaró un modelo
+          // preferido y el servidor está en otro (porque otra pantalla lo
+          // cambió), lo pedimos. Después el selector manual manda.
+          if (!preferenciaAplicada && preferidosRef.current) {
+            preferenciaAplicada = true;
+            const disponibles = Array.isArray(msg.modelos) ? msg.modelos : [];
+            const elegido = preferidosRef.current
+              .split("|")
+              .find((k) => disponibles.includes(k));
+            if (elegido && elegido !== msg.modelo) {
+              setModeloActual(elegido);
+              pedirModeloAlServidor(elegido);
+            }
+          }
         } else if (msg.tipo === "modelo") {
           // El servidor confirma el cambio de modelo (a todos los clientes).
           if (msg.actual) setModeloActual(msg.actual);
+        } else if (msg.tipo === "error") {
+          setEngineError(msg.msg || "El motor de traduccion reporto un error.");
         } else if (msg.tipo === "status") {
+          // Si llegan frames, lo que fallaba ya se resolvio.
+          setEngineError("");
           setStatus({
             estado: msg.estado,
             letra: msg.letra || "",
@@ -113,6 +183,8 @@ export default function useSignServer({ enabled = true, onCommit } = {}) {
         ws?.close();
       } catch {}
       setConnected(false);
+      setServerDown(false);
+      setEngineError("");
       setVideoUrl(""); // detiene el <img> -> libera la cámara del servidor
     };
   }, [enabled]);
@@ -122,10 +194,18 @@ export default function useSignServer({ enabled = true, onCommit } = {}) {
   const setModelo = useCallback((key) => {
     if (!key) return;
     setModeloActual(key);
-    fetch(`${HTTP}/modelo?modelo=${encodeURIComponent(key)}`, {
-      method: "POST",
-    }).catch(() => {});
+    pedirModeloAlServidor(key);
   }, []);
 
-  return { connected, videoUrl, status, lastCommit, modelos, modelo, setModelo };
+  return {
+    connected,
+    serverDown,
+    engineError,
+    videoUrl,
+    status,
+    lastCommit,
+    modelos,
+    modelo,
+    setModelo,
+  };
 }

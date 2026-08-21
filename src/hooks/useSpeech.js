@@ -15,10 +15,15 @@ const defaults = {
   elevenSimilarity: 0.75,
   elevenStyle: 0,
   elevenSpeakerBoost: true,
+  // La key de ElevenLabs la escribe cada usuario en Ajustes y vive en
+  // localStorage. A proposito NO se lee de import.meta.env: Vite sustituye
+  // esas variables por su valor literal al compilar, asi que una key de
+  // build quedaria en texto plano dentro del .exe que se reparte.
+  elevenApiKey: "",
 };
 
-export const ELEVEN_API_KEY = import.meta.env.VITE_ELEVEN_API_KEY || "";
-export const hasElevenKey = () => Boolean(ELEVEN_API_KEY);
+export const hasElevenKey = (settings) =>
+  Boolean((settings || loadVoiceSettings()).elevenApiKey);
 
 export function loadVoiceSettings() {
   try {
@@ -97,9 +102,10 @@ export default function useSpeech() {
 
   const speakEleven = useCallback(
     async (text) => {
-      if (!ELEVEN_API_KEY) {
-        console.warn("ElevenLabs: falta API key en el archivo .env (VITE_ELEVEN_API_KEY).");
-        return;
+      const apiKey = settings.elevenApiKey;
+      if (!apiKey) {
+        console.warn("ElevenLabs: falta la API key (se configura en Ajustes).");
+        return false;
       }
       try {
         setSpeaking(true);
@@ -108,7 +114,7 @@ export default function useSpeech() {
           {
             method: "POST",
             headers: {
-              "xi-api-key": ELEVEN_API_KEY,
+              "xi-api-key": apiKey,
               "Content-Type": "application/json",
               Accept: "audio/mpeg",
             },
@@ -128,7 +134,7 @@ export default function useSpeech() {
         if (!res.ok) {
           console.error("ElevenLabs error:", res.status, await res.text());
           setSpeaking(false);
-          return;
+          return false;
         }
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
@@ -144,19 +150,26 @@ export default function useSpeech() {
         };
         audioRef.current = audio;
         await audio.play();
+        return true;
       } catch (err) {
         console.error("ElevenLabs request failed:", err);
         setSpeaking(false);
+        return false;
       }
     },
     [settings]
   );
 
   const speak = useCallback(
-    (text) => {
+    async (text) => {
       if (!text) return;
       stop();
-      if (settings.provider === "elevenlabs") return speakEleven(text);
+      if (settings.provider === "elevenlabs") {
+        const ok = await speakEleven(text);
+        if (ok) return;
+        // Sin key, sin internet o con la cuenta agotada: mejor la voz del
+        // sistema que el silencio.
+      }
       return speakWeb(text);
     },
     [settings.provider, speakWeb, speakEleven, stop]

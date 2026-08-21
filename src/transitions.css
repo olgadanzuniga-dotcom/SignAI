@@ -1,4 +1,4 @@
-/* ✨ Arregla salto de layout */
+/* Arregla salto de layout */
 .page-enter,
 .page-exit {
   position: absolute;
@@ -28,7 +28,7 @@
   transform: translateY(-10px);
   transition: all 400ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-/* ✨ Animaciones suaves del cambio de tema */
+/* Animaciones suaves del cambio de tema */
 .theme-zoom-out {
   animation: themeZoomOut 0.25s ease forwards;
 }

@@ -1,3 +1,5 @@
+@import "./styles/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -20,27 +22,53 @@ html, body, #root {
 
 /* Aplica fondo global */
 body {
-  @apply bg-gray-50 dark:bg-[#0b1220] text-gray-900 dark:text-gray-100;
+  background-color: rgb(var(--fondo));
+  color: rgb(var(--texto));
 }
 
-/* slider thumb personalizado */
+/* Deslizador de velocidad de la voz. Iba clavado a #6366F1 y a blanco, asi
+   que en modo oscuro era un circulo blanco sobre un carril tambien blanco:
+   el carril lo pintaba el navegador y nadie lo habia tocado. Ahora carril y
+   pulgar salen de los tokens y cambian con el tema como todo lo demas.
+
+   Hace falta `appearance: none` en el propio input, no solo en el pulgar:
+   sin eso el navegador sigue dibujando su carril y el color no se aplica. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(var(--superficie-2));
+  border: 1px solid rgb(var(--borde));
+}
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(var(--superficie-2));
+  border: 1px solid rgb(var(--borde));
+}
 input[type="range"]::-webkit-slider-thumb {
+  /* Centra el pulgar (16 px) sobre el carril (6 px + borde). */
+  margin-top: -5px;
   -webkit-appearance: none;
   height: 16px;
   width: 16px;
   border-radius: 999px;
-  background: white;
-  box-shadow: 0 2px 8px rgba(99,102,241,0.28);
-  border: 3px solid #6366F1;
+  background: rgb(var(--superficie));
+  box-shadow: 0 2px 8px rgb(var(--acento) / 0.28);
+  border: 3px solid rgb(var(--acento));
   cursor: pointer;
 }
 input[type="range"]::-moz-range-thumb {
   height: 16px;
   width: 16px;
   border-radius: 999px;
-  background: white;
-  box-shadow: 0 2px 8px rgba(99,102,241,0.28);
-  border: 3px solid #6366F1;
+  background: rgb(var(--superficie));
+  box-shadow: 0 2px 8px rgb(var(--acento) / 0.28);
+  border: 3px solid rgb(var(--acento));
   cursor: pointer;
 }
 
@@ -48,7 +76,7 @@ input[type="range"]::-moz-range-thumb {
 html {
   transition: background-color 5000ms ease;
 }
-/* 🌌 Zoom & Glow cinematográfico */
+/* Zoom & Glow cinematográfico */
 .theme-zoom-out {
   animation: zoomOutGlow 0.4s ease forwards;
 }
@@ -82,15 +110,21 @@ html {
     opacity: 1;
   }
 }
-/* Reserva siempre el espacio del scrollbar para evitar layout shift */
+/* Reserva el espacio del scrollbar para que la pagina no salte al aparecer.
+   El hueco queda del color del fondo (ver el contenedor en App.jsx): si el
+   contenedor pinta otro color, ahi se ve una franja distinta a lo largo del
+   borde derecho. */
 main {
-  scrollbar-gutter: stable;
+  /* `both-edges` reserva el hueco a los dos lados: sin esto el margen derecho
+     era 17 px mayor que el izquierdo en las pantallas que no hacen scroll. */
+  scrollbar-gutter: stable both-edges;
+  background-color: rgb(var(--fondo));
 }
 
 /* Scrollbar minimalista para menús desplegables */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(99, 102, 241, 0.35) transparent;
+  scrollbar-color: rgb(var(--acento) / 0.35) transparent;
 }
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
@@ -100,12 +134,12 @@ main {
   background: transparent;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: rgba(99, 102, 241, 0.3);
+  background-color: rgb(var(--acento) / 0.3);
   border-radius: 999px;
   transition: background-color 0.2s ease;
 }
 .scrollbar-thin:hover::-webkit-scrollbar-thumb {
-  background-color: rgba(99, 102, 241, 0.55);
+  background-color: rgb(var(--acento) / 0.55);
 }
 
 .perspective-1000 { perspective: 1000px; }

@@ -13,7 +13,7 @@ export default function PageHeader({ showBack = true, onBack, title = "SignAI" }
       {showBack && (
         <button
           onClick={handleBack}
-          className="absolute top-3 left-3 sm:top-4 sm:left-5 lg:top-5 lg:left-7 flex items-center gap-1.5 sm:gap-2 lg:gap-2.5 text-gray-800 dark:text-gray-100 hover:text-indigo-400 transition-all duration-300 z-20"
+          className="absolute top-3 left-3 sm:top-4 sm:left-5 lg:top-5 lg:left-7 flex items-center gap-1.5 sm:gap-2 lg:gap-2.5 text-texto hover:text-acento transition-all duration-300 z-20"
         >
           <Undo2 className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7" strokeWidth={2.2} />
           <span className="hidden sm:inline font-medium text-sm sm:text-base lg:text-lg">Volver</span>
@@ -26,15 +26,15 @@ export default function PageHeader({ showBack = true, onBack, title = "SignAI" }
       {/* Barra fija que aparece al hacer scroll */}
       <div
         className={`fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 sm:px-8 py-3
-          bg-white/80 dark:bg-[#0b0f19]/80 backdrop-blur-md
-          border-b border-gray-200 dark:border-[#1f2833]
+          bg-fondo/80 backdrop-blur-md
+          border-b border-borde
           transition-all duration-300 ease-out
           ${scrolled ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0 pointer-events-none"}`}
       >
         {showBack ? (
           <button
             onClick={handleBack}
-            className="flex items-center gap-2 text-gray-800 dark:text-gray-100 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
+            className="flex items-center gap-2 text-texto hover:text-acento transition-colors"
           >
             <Undo2 size={22} strokeWidth={2.2} />
             <span className="hidden sm:inline font-medium">Volver</span>
@@ -42,7 +42,7 @@ export default function PageHeader({ showBack = true, onBack, title = "SignAI" }
         ) : (
           <div />
         )}
-        <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+        <h1 className="text-lg font-semibold text-texto">
           {title}
         </h1>
       </div>

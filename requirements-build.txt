@@ -1,0 +1,40 @@
+# SignAI — dependencias SOLO para empaquetar el servidor (npm run build:server).
+#
+# Se instalan en un venv aparte (.venv-build) para no tocar el entorno de
+# desarrollo/entrenamiento, que usa torch con CUDA.
+#
+# Por qué un entorno propio: PyInstaller mete en el bundle lo que encuentra
+# instalado. Con torch CUDA (2.9.1+cu126) arrastra cuBLAS, cuDNN y compañía y
+# el servidor pesa ~4.3 GB, imposible de repartir. El modelo es un Transformer
+# pequeño y la inferencia en CPU da resultados idénticos (verificado: misma
+# clase y logits con diferencia < 1e-6). Ver ADR-005.
+#
+# Crear el entorno:  npm run setup:build-env
+# Empaquetar:        npm run build:server
+#
+# NOTA (2026-08-17): este archivo describe el entorno que se USO para construir
+# la 1.1.0, pero `npm run setup:build-env` no se pudo ejecutar de principio a
+# fin ese dia: la red fallaba (pypi.org tardaba >20 s, download.pytorch.org
+# devolvia 0 bytes). El .venv-build actual se armo a mano —torch desde un wheel
+# ya cacheado y el resto copiado del site-packages del Python del sistema, que
+# tiene las mismas versiones— y se verifico que produce un bundle funcional.
+# La primera vez que haya red buena, conviene recrearlo con el comando y
+# confirmar que resuelve igual.
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Modelo — build CPU: sin DLLs de CUDA (torch/lib pasa de ~3 GB a ~310 MB).
+torch==2.13.0+cpu
+
+# Visión / features
+mediapipe==0.10.14
+opencv-python==4.12.0.88
+numpy==2.2.6
+
+# Servidor de inferencia
+fastapi==0.128.0
+uvicorn==0.40.0
+websockets==16.0
+
+# Empaquetado
+pyinstaller>=6.0

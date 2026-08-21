@@ -1,8 +1,7 @@
 node_modules
 release/
 dist/
-
-# Documentacion viva (boveda Obsidian) - intencionalmente fuera del control de versiones
+dist-server/
 docs/
 CLAUDE.md
 win-unpacked/
@@ -21,3 +20,27 @@ __pycache__/
 !/Avances/Modelo Transformer/
 Avances/Modelo Transformer/analizar_abecedario.py
 .claude/
+
+# Entorno de empaquetado (torch CPU) usado por npm run build:server
+.venv-build/
+
+
+# Puntos de retorno del rediseño (locales, no versionados)
+.respaldo-diseno-*/
+.respaldo-ultimo
+
+# Entorno de desarrollo/entrenamiento
+.venv/
+
+# Herramientas locales
+.commandcode/
+
+# Pesos de modelos archivados y de referencia: se versionan sus metadatos
+# (feature_meta.json / label_map.json / split.json) pero no los .pth, que
+# pesan ~19 MB cada uno y no hacen falta para ejecutar la app.
+Avances/Modelo Transformer/modelos/_viejos/*/signai_transformer.pth
+Avances/Modelo Transformer/modelos/_cmp_*/signai_transformer.pth
+
+# El ONNX del modelo unificado vive en el repo movil
+# (signai-mobile/assets/models/unificado/signai.onnx)
+Avances/Modelo Transformer/modelos/unificado/signai.onnx

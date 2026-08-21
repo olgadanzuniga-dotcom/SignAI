@@ -1,17 +1,27 @@
 import React, { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, Play, StopCircle, CheckCircle, ScanLine } from "lucide-react";
+import { StopCircle, CheckCircle, ScanLine, ArrowRight, Check } from "lucide-react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Center } from "@react-three/drei";
 import useCamera from "../../../hooks/useCamera";
 import useSignServer from "../../../hooks/useSignServer";
+import useCerrarSidebar from "../../../hooks/useCerrarSidebar";
+import { senasEstaticas, senasDinamicas } from "../../../data/palabras";
 import PageHeader from "../../common/PageHeader";
 import Tutorial from "../../common/Tutorial";
 import PageLayout from "../../common/PageLayout";
+import CameraStartScreen from "../../common/CameraStartScreen";
+import ServerStatusOverlay from "../../common/ServerStatusOverlay";
 
-// Letras que el modelo reconoce (señas estáticas). Las dinámicas
-// (J, K, Q, X, Z) no están entrenadas, así que esas se avanzan a mano.
-const LETRAS_MODELO = new Set("ABCDEFGHILMNOPRSTUVWY".split(""));
+// Qué letras puede validar cada modelo del servidor. Con "unificado" también
+// entran las letras con movimiento (J, Q, RR, X, Z, Ñ); con "estatico" solo las
+// quietas. La K no está en ningún dataset todavía, así que nunca se valida.
+const soportaLetra = (modelo, letra) => {
+  if (modelo === "dinamico") return senasDinamicas.has(letra);
+  if (modelo === "estatico") return senasEstaticas.has(letra);
+  // unificado (o cualquier modelo combinado): estáticas + dinámicas
+  return senasEstaticas.has(letra) || senasDinamicas.has(letra);
+};
 
 const LECCION_TUTORIAL_STEPS_INTRO = [
   {
@@ -80,7 +90,6 @@ export default function LeccionAprender({
 
   const itemActual = items[indiceActual];
   const objetivo = (itemActual.label || "").toUpperCase();
-  const letraSoportada = validarConModelo && LETRAS_MODELO.has(objetivo);
 
   // --- Cámara manual (categorías que NO usan el modelo) ---
   const {
@@ -97,6 +106,9 @@ export default function LeccionAprender({
   const objetivoRef = useRef(objetivo);
   objetivoRef.current = objetivo;
   const exitoRef = useRef(false);
+  const avanceTimerRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(avanceTimerRef.current), []);
 
   const onSignCommit = useCallback((c) => {
     // Acierto solo si la letra confirmada coincide con la lección actual.
@@ -106,14 +118,18 @@ export default function LeccionAprender({
     }
   }, []);
 
-  const { connected, videoUrl, status } = useSignServer({
+  // Las lecciones validadas son de letras: el "unificado" las cubre todas
+  // (incluidas J/Q/X/Z/Ñ); si no está compilado, el "estatico" es el mínimo
+  // viable. Sin esto la lección heredaría el modelo que dejó otra pantalla.
+  const { connected, serverDown, engineError, videoUrl, status, modelo } = useSignServer({
     enabled: validarConModelo,
+    modeloPreferido: ["unificado", "estatico"],
     onCommit: onSignCommit,
   });
 
-  useEffect(() => {
-    if (typeof setSidebarOpen === "function") setSidebarOpen(false);
-  }, [setSidebarOpen]);
+  const letraSoportada = validarConModelo && soportaLetra(modelo, objetivo);
+
+  useCerrarSidebar(setSidebarOpen);
 
   const siguiente = () => {
     setIndiceActual((prev) => (prev + 1) % items.length);
@@ -124,7 +140,7 @@ export default function LeccionAprender({
   const manejarAcierto = useCallback(() => {
     setMostrarExito(true);
     exitoRef.current = true;
-    setTimeout(() => {
+    avanceTimerRef.current = setTimeout(() => {
       setMostrarExito(false);
       exitoRef.current = false;
       setIndiceActual((prev) => (prev + 1) % items.length);
@@ -149,13 +165,13 @@ export default function LeccionAprender({
   return (
     <PageLayout
       className="min-h-screen"
-      contentClassName="pt-14 px-4 sm:px-6 lg:px-8 pb-4 sm:pb-8 text-gray-900 dark:text-gray-100"
+      contentClassName="pt-14 px-4 sm:px-6 lg:px-8 pb-4 sm:pb-8 text-texto"
     >
       <PageHeader />
 
       <div className="w-full max-w-7xl 2xl:max-w-[1600px] mx-auto mt-4 sm:mt-6 lg:mt-8 flex-1 min-h-0 flex flex-col">
         <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 sm:gap-6 lg:gap-8 flex-1 min-h-0">
-          <div className="aspect-video md:aspect-auto bg-gray-200 dark:bg-[#1c212c] rounded-3xl flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 relative overflow-hidden shadow-inner">
+          <div className="aspect-video md:aspect-auto bg-superficie-2 rounded-3xl flex flex-col items-center justify-center border-2 border-dashed border-borde relative overflow-hidden shadow-inner">
             {camaraActiva ? (
               <>
                 {validarConModelo ? (
@@ -220,7 +236,7 @@ export default function LeccionAprender({
                   {validarConModelo
                     ? letraSoportada
                       ? "Haz la seña de la letra"
-                      : "Letra con movimiento"
+                      : "Sin validación automática"
                     : "Cámara activa"}
                 </div>
 
@@ -231,86 +247,68 @@ export default function LeccionAprender({
                     data-tutorial="leccion-acierto"
                     onClick={manejarAcierto}
                     disabled={mostrarExito}
-                    className="absolute bottom-3 right-3 sm:bottom-5 sm:right-5 lg:bottom-7 lg:right-7 bg-green-500 hover:bg-green-600 text-white px-4 py-2 sm:px-5 sm:py-2.5 lg:px-6 lg:py-3 rounded-full font-bold shadow-lg transition z-20 animate-bounce text-xs sm:text-sm lg:text-base"
+                    className="absolute bottom-3 right-3 sm:bottom-5 sm:right-5 lg:bottom-7 lg:right-7 bg-green-500 hover:bg-green-600 text-white px-4 py-2 sm:px-5 sm:py-2.5 lg:px-6 lg:py-3 rounded-full font-bold shadow-lg transition z-20 animate-bounce text-xs sm:text-sm lg:text-base inline-flex items-center gap-1.5"
                   >
-                    {validarConModelo ? "Siguiente →" : "✔️ Simular Acierto"}
+                    {validarConModelo ? (
+                      <>
+                        Siguiente
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" strokeWidth={3} />
+                        Simular Acierto
+                      </>
+                    )}
                   </button>
                 )}
 
-                {/* Aviso para letras no soportadas por el modelo */}
+                {/* Aviso para letras que el modelo activo no puede validar */}
                 {validarConModelo && !letraSoportada && (
                   <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-amber-500/90 text-black text-xs font-semibold px-3 py-1.5 rounded-full">
-                    Esta letra requiere movimiento; aún no se detecta automáticamente
+                    {modelo === "estatico" && senasDinamicas.has(objetivo)
+                      ? "Esta letra lleva movimiento; el modelo estático no la detecta"
+                      : "Esta letra aún no está en el modelo; avanza manualmente"}
                   </div>
                 )}
 
                 {/* Conectando al servidor (modo modelo) */}
                 {validarConModelo && !connected && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-40">
-                    <div className="text-center text-white space-y-3">
-                      <div className="mx-auto animate-spin rounded-full h-9 w-9 border-4 border-white/30 border-t-white" />
-                      <p className="text-sm">Conectando con el motor de traducción…</p>
-                    </div>
-                  </div>
+                  <ServerStatusOverlay serverDown={serverDown} engineError={engineError} />
                 )}
               </>
             ) : (
-              <div className="flex flex-col items-center justify-center text-center p-3 sm:p-5 lg:p-7 2xl:p-9 z-10 relative">
-                {loading ? (
-                  <div className="flex flex-col items-center">
-                    <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 border-4 border-indigo-600 border-t-transparent mb-3"></div>
-                    <p className="text-indigo-600 font-medium animate-pulse text-sm sm:text-base lg:text-lg">
-                      Iniciando cámara...
-                    </p>
-                  </div>
-                ) : (
+              <CameraStartScreen
+                size="lg"
+                loading={loading}
+                errorMsg={errorMsg}
+                onStart={startCamera}
+                dataTutorial="leccion-iniciar"
+                startLabel="Iniciar Cámara"
+                descripcion={
                   <>
-                    <div className="bg-white dark:bg-[#252a38] p-4 sm:p-6 lg:p-7 2xl:p-9 rounded-full mb-3 sm:mb-5 lg:mb-6 shadow-xl ring-4 ring-gray-50 dark:ring-gray-800 transition-transform hover:scale-105">
-                      <Camera className="text-gray-400 dark:text-gray-500 w-9 h-9 sm:w-11 sm:h-11 lg:w-12 lg:h-12 2xl:w-14 2xl:h-14" />
-                    </div>
-                    <h3 className="text-lg sm:text-2xl lg:text-3xl 2xl:text-4xl font-bold mb-1.5 sm:mb-2 lg:mb-3 text-gray-800 dark:text-white">
-                      Cámara Desactivada
-                    </h3>
-                    <p className="text-gray-500 dark:text-gray-400 max-w-xs sm:max-w-sm lg:max-w-md mb-4 sm:mb-6 lg:mb-7 text-xs sm:text-base lg:text-lg 2xl:text-xl">
-                      Dale clic a iniciar para empezar a practicar desde{" "}
-                      <strong className="text-indigo-500">{items[0].label}</strong>
-                    </p>
-                    {errorMsg && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="text-red-600 text-xs sm:text-sm mb-3 sm:mb-5 bg-red-100 dark:bg-red-900/30 px-3 py-2 rounded-xl border border-red-200 dark:border-red-800 flex items-center gap-2"
-                      >
-                        ⚠️ {errorMsg}
-                      </motion.div>
-                    )}
-                    <button
-                      data-tutorial="leccion-iniciar"
-                      onClick={startCamera}
-                      disabled={loading}
-                      className="group flex items-center gap-2 sm:gap-2.5 lg:gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-4 sm:px-7 lg:px-10 2xl:px-12 py-2 sm:py-3.5 lg:py-4 2xl:py-5 rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg lg:text-xl 2xl:text-2xl shadow-xl hover:shadow-indigo-500/40 transition-all transform hover:-translate-y-1 active:scale-95"
-                    >
-                      <div className="bg-white/20 p-1 sm:p-1.5 lg:p-2 rounded-full group-hover:bg-white/30 transition">
-                        <Play fill="currentColor" className="ml-0.5 w-3.5 h-3.5 sm:w-5 sm:h-5 lg:w-6 lg:h-6 2xl:w-7 2xl:h-7" />
-                      </div>
-                      Iniciar Cámara
-                    </button>
+                    Dale clic a iniciar para empezar a practicar desde{" "}
+                    <strong className="text-acento">{items[0].label}</strong>
                   </>
-                )}
-              </div>
+                }
+              />
             )}
           </div>
 
           {/* PANEL DERECHO - proporción fija 3:1 entre modelo y label */}
           <div className="grid grid-rows-[3fr_1fr] gap-3 sm:gap-4 aspect-[2/3] md:aspect-auto min-h-0">
-            <div data-tutorial="leccion-modelo" className="min-h-0 bg-white dark:bg-[#151822] rounded-3xl shadow-xl border border-gray-200 dark:border-gray-800 relative overflow-hidden flex flex-col">
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-50 z-10"></div>
+            <div data-tutorial="leccion-modelo" className="min-h-0 bg-superficie rounded-3xl shadow-xl border border-borde relative overflow-hidden flex flex-col">
+              {/* Franja de la marca: los mismos tonos de la rampa que ordenan el temario. */}
+              <div
+                className="absolute top-0 left-0 w-full h-2 opacity-60 z-10"
+                style={{ backgroundImage: "var(--degradado-marca)" }}
+              ></div>
 
               <div className="flex-1 w-full h-full cursor-grab active:cursor-grabbing relative z-0">
                 <Suspense
                   fallback={
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
+                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-acento border-t-transparent"></div>
                     </div>
                   }
                 >
@@ -325,14 +323,14 @@ export default function LeccionAprender({
               </div>
             </div>
 
-            <div data-tutorial="leccion-item" className="min-h-0 bg-white dark:bg-[#151822] rounded-3xl shadow-xl border border-gray-200 dark:border-gray-800 flex items-center justify-center overflow-hidden px-6">
+            <div data-tutorial="leccion-item" className="min-h-0 bg-superficie rounded-3xl shadow-xl border border-borde flex items-center justify-center overflow-hidden px-6">
               <AnimatePresence mode="wait">
                 <motion.span
                   key={itemActual.id}
                   initial={{ scale: 0.8, opacity: 0, y: -20 }}
                   animate={{ scale: 1, opacity: 1, y: 0 }}
                   exit={{ scale: 1.2, opacity: 0, y: 20 }}
-                  className={`${tamanoLabel(itemActual.label)} font-black leading-tight select-none text-gray-900 dark:text-white text-center`}
+                  className={`${tamanoLabel(itemActual.label)} font-black leading-tight select-none text-texto text-center`}
                 >
                   {itemActual.label}
                 </motion.span>

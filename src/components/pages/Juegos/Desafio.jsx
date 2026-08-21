@@ -1,12 +1,21 @@
-import React, { useState, useEffect } from "react";
-import { Camera, Play, StopCircle, Timer, CheckCircle, XCircle } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { StopCircle, Timer, CheckCircle, XCircle, ScanLine } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
-import useCamera from "../../../hooks/useCamera";
-import { palabrasDesafio as listaDesafio } from "../../../data/palabras";
+import useSignServer from "../../../hooks/useSignServer";
+import useCerrarSidebar from "../../../hooks/useCerrarSidebar";
+import {
+  palabrasDesafio,
+  senasEstaticas,
+  senasDinamicas,
+} from "../../../data/palabras";
 import PageHeader from "../../common/PageHeader";
 import Tutorial from "../../common/Tutorial";
 import PageLayout from "../../common/PageLayout";
+import GameOverCard from "../../common/GameOverCard";
+import CameraStartScreen from "../../common/CameraStartScreen";
+import ServerStatusOverlay from "../../common/ServerStatusOverlay";
+
+const TIEMPO_POR_SENA = 20;
 
 const DESAFIO_TUTORIAL_STEPS = [
   {
@@ -24,7 +33,7 @@ const DESAFIO_TUTORIAL_STEPS = [
   {
     key: "desafio-palabra",
     title: "Seña objetivo",
-    text: "Esta es la palabra que debes representar con tus manos frente a la cámara.",
+    text: "Esta es la seña que debes representar con tus manos frente a la cámara. El modelo de IA la validará automáticamente.",
     placement: "top",
   },
   {
@@ -36,138 +45,188 @@ const DESAFIO_TUTORIAL_STEPS = [
 ];
 
 export default function Desafio({ sidebarOpen, setSidebarOpen }) {
-  const navigate = useNavigate();
-
   const [juegoIniciado, setJuegoIniciado] = useState(false);
   const [rondaActual, setRondaActual] = useState(0);
   const [estadoRonda, setEstadoRonda] = useState("esperando");
-  const [tiempoRestante, setTiempoRestante] = useState(20);
+  const [tiempoRestante, setTiempoRestante] = useState(TIEMPO_POR_SENA);
   const [puntaje, setPuntaje] = useState(0);
 
-  const { videoRef, active: cameraActive, errorMsg, loading, start, stop: stopStream } = useCamera();
+  useCerrarSidebar(setSidebarOpen);
 
+  // El acierto lo confirma el servidor de inferencia: cuando el modelo emite
+  // un commit cuya seña coincide con el objetivo de la ronda, avanzamos.
+  // Refs para que el callback (estable) siempre vea el estado actual.
+  const estadoRef = useRef(estadoRonda);
+  estadoRef.current = estadoRonda;
+  const objetivoRef = useRef("");
+  const manejarAciertoRef = useRef(null);
+  // Timer del "éxito → siguiente ronda": si el jugador se rinde o sale a media
+  // animación, no debe seguir avanzando rondas de un componente desmontado.
+  const avanceRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(avanceRef.current), []);
+
+  const onCommit = useCallback((c) => {
+    if (estadoRef.current !== "jugando") return;
+    if ((c.letra || "").toUpperCase() === objetivoRef.current) {
+      manejarAciertoRef.current?.();
+    }
+  }, []);
+
+  // El desafío mezcla letras estáticas y palabras dinámicas, así que pide el
+  // modelo "unificado" al conectar. Si no está disponible, las rondas se
+  // filtran a lo que el modelo activo sí puede reconocer.
+  const { connected, serverDown, engineError, videoUrl, status, modelo } = useSignServer({
+    enabled: juegoIniciado,
+    modeloPreferido: "unificado",
+    onCommit,
+  });
+
+  const cameraActive = !!videoUrl;
+
+  const rondas = useMemo(() => {
+    if (modelo === "estatico") return palabrasDesafio.filter((p) => senasEstaticas.has(p));
+    if (modelo === "dinamico") return palabrasDesafio.filter((p) => senasDinamicas.has(p));
+    return palabrasDesafio;
+  }, [modelo]);
+
+  const objetivo = juegoIniciado ? rondas[rondaActual] || "" : "";
+  objetivoRef.current = objetivo;
+
+  // La ronda arranca cuando el stream de la cámara ya está en pantalla.
   useEffect(() => {
-    if (typeof setSidebarOpen === "function") setSidebarOpen(false);
-  }, [setSidebarOpen]);
+    if (juegoIniciado && cameraActive && estadoRonda === "esperando") {
+      setEstadoRonda("jugando");
+      setTiempoRestante(TIEMPO_POR_SENA);
+    }
+  }, [juegoIniciado, cameraActive, estadoRonda]);
 
+  // Cronómetro: solo corre con la cámara visible (si el servidor se cae a
+  // media ronda, el tiempo se pausa junto con el overlay de reconexión).
   useEffect(() => {
     let timer;
-    if (juegoIniciado && estadoRonda === "jugando" && tiempoRestante > 0) {
+    if (juegoIniciado && cameraActive && estadoRonda === "jugando" && tiempoRestante > 0) {
       timer = setInterval(() => {
         setTiempoRestante((prev) => prev - 1);
       }, 1000);
     } else if (tiempoRestante === 0 && estadoRonda === "jugando") {
       setEstadoRonda("fracaso");
-      stopStream();
+      setJuegoIniciado(false); // cierra WS y libera la cámara del servidor
     }
     return () => clearInterval(timer);
-  }, [juegoIniciado, estadoRonda, tiempoRestante]);
-
-  const startCamera = async () => {
-    const ok = await start();
-    if (ok) {
-      setJuegoIniciado(true);
-      setEstadoRonda("jugando");
-      setTiempoRestante(20);
-    }
-  };
+  }, [juegoIniciado, cameraActive, estadoRonda, tiempoRestante]);
 
   const manejarAcierto = () => {
     if (estadoRonda !== "jugando") return;
-    
+
     setEstadoRonda("exito");
     setPuntaje((prev) => prev + 1);
 
-    setTimeout(() => {
-      if (rondaActual + 1 < listaDesafio.length) {
+    avanceRef.current = setTimeout(() => {
+      if (rondaActual + 1 < rondas.length) {
         setRondaActual((prev) => prev + 1);
-        setTiempoRestante(20); 
+        setTiempoRestante(TIEMPO_POR_SENA);
         setEstadoRonda("jugando");
       } else {
         setEstadoRonda("terminado");
-        stopStream();
+        setJuegoIniciado(false);
       }
     }, 2000);
   };
+  manejarAciertoRef.current = manejarAcierto;
+
+  const rendirse = () => {
+    clearTimeout(avanceRef.current);
+    setEstadoRonda("fracaso");
+    setJuegoIniciado(false);
+  };
 
   const reiniciarJuego = () => {
+    clearTimeout(avanceRef.current);
     setRondaActual(0);
     setPuntaje(0);
     setEstadoRonda("esperando");
     setJuegoIniciado(false);
-    setTiempoRestante(20);
+    setTiempoRestante(TIEMPO_POR_SENA);
   };
 
   return (
     // pt-14 empuja el contenido justo debajo del botón Volver
     <PageLayout
       className="min-h-screen"
-      contentClassName="pt-14 px-4 sm:px-6 lg:px-8 2xl:px-12 pb-4 text-gray-900 dark:text-gray-100"
+      contentClassName="pt-14 px-4 sm:px-6 lg:px-8 2xl:px-12 pb-6 text-texto"
     >
 
       <PageHeader />
 
       <div className="flex-1 w-full max-w-4xl 2xl:max-w-6xl mx-auto flex flex-col items-center justify-center">
-        
+
         {estadoRonda === "fracaso" || estadoRonda === "terminado" ? (
-          <motion.div 
-            initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} 
-            className="bg-white dark:bg-[#151822] rounded-3xl p-8 sm:p-12 shadow-2xl text-center w-full border border-gray-100 dark:border-gray-800"
+          <GameOverCard
+            titulo={estadoRonda === "fracaso" ? "¡Tiempo Agotado!" : "¡Desafío Completado!"}
+            tituloClassName={`text-3xl sm:text-4xl font-extrabold mb-3 ${
+              estadoRonda === "fracaso" ? "text-error" : "text-exito"
+            }`}
+            className="p-8 sm:p-12 shadow-2xl w-full border-borde"
+            icono={
+              estadoRonda === "fracaso" ? (
+                <XCircle size={70} className="mx-auto text-error mb-4" />
+              ) : (
+                <CheckCircle size={70} className="mx-auto text-exito mb-4" />
+              )
+            }
+            acciones={
+              <button
+                onClick={reiniciarJuego}
+                className="bg-acento text-acento-texto px-8 py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-acento-fuerte transition"
+              >
+                Volver a intentar
+              </button>
+            }
           >
-            {estadoRonda === "fracaso" ? (
-              <>
-                <XCircle size={70} className="mx-auto text-red-500 mb-4" />
-                <h2 className="text-3xl sm:text-4xl font-extrabold text-red-500 mb-3">¡Tiempo Agotado!</h2>
-                <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-300 mb-6">
-                  Lograste acertar <strong className="text-indigo-500">{puntaje}</strong> palabras consecutivas.
-                </p>
-              </>
-            ) : (
-              <>
-                <CheckCircle size={70} className="mx-auto text-green-500 mb-4" />
-                <h2 className="text-3xl sm:text-4xl font-extrabold text-green-500 mb-3">¡Desafío Completado!</h2>
-                <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-300 mb-6">
-                  ¡Increíble! Acertaste todas las palabras.
-                </p>
-              </>
-            )}
-            
-            <button 
-              onClick={reiniciarJuego}
-              className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-indigo-700 transition"
-            >
-              Volver a intentar
-            </button>
-          </motion.div>
+            <p className="text-lg sm:text-xl text-sutil mb-6">
+              {estadoRonda === "fracaso" ? (
+                <>
+                  Lograste acertar <strong className="text-acento">{puntaje}</strong> señas consecutivas.
+                </>
+              ) : (
+                <>¡Increíble! Acertaste todas las señas.</>
+              )}
+            </p>
+          </GameOverCard>
         ) : (
 
           <div className="w-full flex-1 flex flex-col gap-3 justify-between">
-            
+
             <div className="flex-none w-full flex justify-between items-end px-2 2xl:px-4">
               <div data-tutorial="desafio-temporizador" className="flex flex-col">
-                <span className="text-xs sm:text-sm 2xl:text-base font-bold tracking-widest text-gray-400 uppercase">Tiempo</span>
-                <div className={`flex items-center gap-1.5 2xl:gap-2 text-3xl sm:text-4xl 2xl:text-5xl font-black ${tiempoRestante <= 5 ? 'text-red-500 animate-pulse' : 'text-gray-800 dark:text-white'}`}>
+                <span className="text-xs sm:text-sm 2xl:text-base font-bold tracking-widest text-sutil uppercase">Tiempo</span>
+                <div className={`flex items-center gap-1.5 2xl:gap-2 text-3xl sm:text-4xl 2xl:text-5xl font-black ${tiempoRestante <= 5 ? 'text-error animate-pulse' : 'text-texto'}`}>
                   <Timer className="w-7 h-7 sm:w-8 sm:h-8 2xl:w-10 2xl:h-10" />
                   0:{tiempoRestante.toString().padStart(2, '0')}
                 </div>
               </div>
               <div data-tutorial="desafio-aciertos" className="text-right">
-                <span className="text-xs sm:text-sm 2xl:text-base font-bold tracking-widest text-gray-400 uppercase">Aciertos</span>
-                <div className="text-3xl sm:text-4xl 2xl:text-5xl font-black text-indigo-600 leading-none">{puntaje}</div>
+                <span className="text-xs sm:text-sm 2xl:text-base font-bold tracking-widest text-sutil uppercase">Aciertos</span>
+                <div className="text-3xl sm:text-4xl 2xl:text-5xl font-black text-acento leading-none">{puntaje}</div>
               </div>
             </div>
 
             {/* flex-1: esta caja ocupa todo el espacio vertical sobrante */}
-            <div className="flex-1 w-full bg-gray-200 dark:bg-[#1c212c] rounded-3xl flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 relative overflow-hidden shadow-inner min-h-[300px]">
-              
+            <div className="flex-1 w-full bg-superficie-2 rounded-3xl flex flex-col items-center justify-center border-2 border-dashed border-borde relative overflow-hidden shadow-inner min-h-[300px]">
+
               {cameraActive ? (
                 <>
-                  {/* object-cover asegura que el video llene la caja completa sin importar su forma */}
-                  <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" style={{ transform: "scaleX(-1)" }} />
-                  
+                  {/* El stream MJPEG llega ya anotado (landmarks) desde el servidor */}
+                  <img
+                    src={videoUrl}
+                    alt="Cámara con detección de señas"
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+
                   <AnimatePresence>
                     {estadoRonda === "exito" && (
-                      <motion.div 
+                      <motion.div
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         className="absolute inset-0 bg-green-500/30 backdrop-blur-sm flex items-center justify-center z-30"
                       >
@@ -178,63 +237,56 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
                     )}
                   </AnimatePresence>
 
+                  {/* Seña detectada en vivo por el modelo.
+                      Este chip y el botón RENDIRSE van sobre la imagen de la
+                      cámara, no sobre el fondo de la app: por eso llevan color
+                      fijo (negro translucido, blanco, rojo) y no tokens. Si
+                      siguieran al tema claro dejarían de leerse. */}
+                  {estadoRonda === "jugando" && status.letra && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
+                      <ScanLine className="w-4 h-4 text-cyan-300" />
+                      <span className="text-white font-bold text-lg">{status.letra}</span>
+                      <span className="text-white/60 text-xs">
+                        {Math.round((status.conf || 0) * 100)}%
+                      </span>
+                    </div>
+                  )}
+
                   <button
-                    onClick={() => { stopStream(); setEstadoRonda("fracaso"); }}
+                    onClick={rendirse}
                     className="absolute top-4 right-4 bg-red-500/90 hover:bg-red-600 text-white px-4 py-2 rounded-full text-xs font-bold backdrop-blur-sm transition z-20 flex items-center gap-2 shadow-md"
                   >
                     <StopCircle size={16} /> RENDIRSE
                   </button>
-
-                  {estadoRonda === "jugando" && (
-                    <button
-                      onClick={manejarAcierto}
-                      className="absolute bottom-4 right-4 bg-green-500 hover:bg-green-600 text-white px-5 py-2.5 rounded-full font-bold shadow-lg transition z-20 animate-bounce text-sm"
-                    >
-                      ✔️ Simular Acierto
-                    </button>
-                  )}
                 </>
+              ) : juegoIniciado ? (
+                <ServerStatusOverlay
+                  serverDown={serverDown}
+                  engineError={engineError}
+                  className="absolute inset-0 flex items-center justify-center bg-black/60 z-10"
+                />
               ) : (
-                <div className="flex flex-col items-center justify-center text-center p-4 z-10 relative">
-                  {loading ? (
-                    <div className="flex flex-col items-center">
-                      <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent mb-3"></div>
-                      <p className="text-indigo-600 font-medium animate-pulse text-sm">Iniciando cámara...</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="bg-white dark:bg-[#252a38] p-5 sm:p-6 rounded-full mb-4 shadow-md ring-4 ring-gray-50 dark:ring-gray-800 transition-transform hover:scale-105">
-                        <Camera size={40} className="text-gray-400 dark:text-gray-500" />
-                      </div>
-                      <h3 className="text-xl sm:text-2xl font-bold mb-2 text-gray-800 dark:text-white">Cámara Desactivada</h3>
-                      <p className="text-gray-500 dark:text-gray-400 max-w-sm mb-5 text-sm sm:text-base">
-                        Activa la cámara para comenzar. El tiempo correrá en cuanto te veas en pantalla.
-                      </p>
-                      {errorMsg && <p className="text-red-500 text-sm mb-3">{errorMsg}</p>}
-                      <button
-                        data-tutorial="desafio-iniciar"
-                        onClick={startCamera}
-                        disabled={loading}
-                        className="group flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-lg shadow-lg hover:shadow-indigo-500/40 transition-all transform hover:-translate-y-1 active:scale-95"
-                      >
-                        <Play size={20} fill="currentColor" /> Iniciar Reto
-                      </button>
-                    </>
-                  )}
-                </div>
+                <CameraStartScreen
+                  size="sm"
+                  loading={false}
+                  onStart={() => setJuegoIniciado(true)}
+                  startLabel="Iniciar Reto"
+                  dataTutorial="desafio-iniciar"
+                  descripcion="Activa la cámara para comenzar. La IA validará tus señas y el tiempo correrá en cuanto te veas en pantalla."
+                />
               )}
             </div>
 
             {/* Compactada para no robar espacio a la cámara */}
-            <div data-tutorial="desafio-palabra" className="flex-none w-full bg-white dark:bg-[#151822] rounded-3xl shadow-lg border border-gray-200 dark:border-gray-800 py-3 2xl:py-5 flex flex-col items-center justify-center text-center">
-              <span className="text-xs 2xl:text-sm font-bold tracking-widest text-indigo-500 uppercase mb-0.5 2xl:mb-1">Haz la seña para:</span>
+            <div data-tutorial="desafio-palabra" className="flex-none w-full bg-superficie rounded-3xl shadow-lg border border-borde py-3 2xl:py-5 flex flex-col items-center justify-center text-center">
+              <span className="text-xs 2xl:text-sm font-bold tracking-widest text-acento uppercase mb-0.5 2xl:mb-1">Haz la seña para:</span>
               <AnimatePresence mode="wait">
                 <motion.h2
                   key={rondaActual}
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                  className="text-4xl sm:text-5xl 2xl:text-7xl font-black text-gray-900 dark:text-white tracking-wider leading-none"
+                  className="text-4xl sm:text-5xl 2xl:text-7xl font-black text-texto tracking-wider leading-none"
                 >
-                  {juegoIniciado ? listaDesafio[rondaActual] : "???"}
+                  {objetivo || "???"}
                 </motion.h2>
               </AnimatePresence>
             </div>
