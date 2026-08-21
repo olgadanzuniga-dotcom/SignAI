@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -301,7 +302,14 @@ def ahora_iso() -> str:
 
 
 def ahora_ms() -> int:
-    return int(datetime.now().timestamp() * 1000)
+    """Milisegundos de un reloj MONOTONO. Solo sirve para medir lapsos
+    (duracion de un segmento, cooldowns, quietud), nunca para sellar una
+    muestra: para eso esta ahora_iso().
+
+    Con el reloj de pared, un ajuste de NTP o un cambio manual de hora dejaba
+    sin ordenar la lista de timestamps de un segmento, y resamplear_a_fps()
+    hace np.searchsorted() sobre ella: el remuestreo salia mal en silencio."""
+    return int(time.monotonic() * 1000)
 
 
 def guardar_json(data: dict, path: str | Path) -> None:

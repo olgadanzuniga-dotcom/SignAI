@@ -3,11 +3,20 @@ const path = require("path");
 const { spawn, execFile } = require("child_process");
 
 const SERVER_EXE = "signai-server.exe";
+const PUERTO_SERVIDOR = Number(process.env.SIGNAI_PORT || 8765);
+const URL_SALUD = `http://127.0.0.1:${PUERTO_SERVIDOR}/health`;
+
+// Cuanto esperamos a que el motor conteste /health. El primer arranque en frio
+// carga torch y MediaPipe desde disco y puede tardar bastante mas que los
+// siguientes, asi que el margen es generoso.
+const SALUD_INTENTOS = 60;
+const SALUD_ESPERA_MS = 500;
 
 let serverProc = null;
 let mainWindow = null;
 let cerrando = false;        // true durante el apagado: no avisar de la muerte del servidor
 let errorMostrado = false;   // el aviso de "motor caido" se muestra una sola vez
+let reintentoHecho = false;  // solo se reintenta arrancar el motor una vez
 
 // Dos ventanas de SignAI pelearian por el puerto 8765 y por la camara: la
 // segunda se queda sin servidor y la app parece rota. La instancia extra cede
@@ -27,15 +36,43 @@ function getWindowsIconPath() {
 // nuevo no podria hacer bind y moriria en silencio. Como el lock de instancia
 // unica ya garantiza que no hay otro SignAI legitimo corriendo, cualquier
 // signai-server.exe que quede es huerfano y se puede matar.
+//
+// En desarrollo NO se hace: ahi el motor corre como python.exe y matarlos
+// todos se llevaria por delante procesos ajenos al proyecto. Para ese caso
+// sirve el sondeo de sondearSalud(), que detecta el huerfano y lo reutiliza.
 function limpiarServidorHuerfano(done) {
   if (!app.isPackaged || process.platform !== "win32") return done();
   execFile("taskkill", ["/IM", SERVER_EXE, "/F"], { windowsHide: true }, () => done());
+}
+
+// Un unico sondeo a /health. Devuelve el estado del motor, o null si todavia
+// no escucha. El servidor responde 503 cuando arranco pero su hilo murio o
+// perdio la camara, asi que un cuerpo con ok:false tambien es informacion.
+async function sondearSalud(timeoutMs = 1500) {
+  try {
+    const r = await fetch(URL_SALUD, { signal: AbortSignal.timeout(timeoutMs) });
+    const estado = await r.json().catch(() => null);
+    return estado ?? { ok: r.ok };
+  } catch {
+    return null;
+  }
+}
+
+async function esperarServidorSano() {
+  for (let i = 0; i < SALUD_INTENTOS; i++) {
+    if (cerrando) return null;
+    const estado = await sondearSalud();
+    if (estado) return estado;
+    await new Promise((r) => setTimeout(r, SALUD_ESPERA_MS));
+  }
+  return null;
 }
 
 // Lanza el servidor local de inferencia (Python).
 //  - En desarrollo: ejecuta "SignAI Server.py" con el lanzador `py`.
 //  - Empaquetado: ejecuta el .exe generado con PyInstaller en resources/.
 function startInferenceServer() {
+  cerrando = false;
   try {
     if (app.isPackaged) {
       const exe = path.join(process.resourcesPath, "signai-server", SERVER_EXE);
@@ -52,9 +89,16 @@ function startInferenceServer() {
     serverProc.stderr?.on("data", (d) => console.log(`[server] ${d}`.trim()));
     serverProc.on("error", (err) => {
       console.error("[server] no se pudo iniciar:", err);
+      // El motivo es distinto segun el modo, y decirle "reinstala SignAI" a
+      // quien esta desarrollando (donde lo que falta es el lanzador `py`) no
+      // ayuda en nada.
       avisarMotorCaido(
-        "No se encontro el motor de traduccion.\n\n" +
-        "Reinstala SignAI para restaurar los archivos que faltan."
+        app.isPackaged
+          ? "No se encontro el motor de traduccion.\n\n" +
+            "Reinstala SignAI para restaurar los archivos que faltan."
+          : "No se pudo ejecutar el lanzador `py`.\n\n" +
+            "Instala Python 3 desde python.org marcando la casilla de anadirlo " +
+            "al PATH, o arranca el servidor a mano con `npm run server`."
       );
     });
     serverProc.on("exit", (code) => {
@@ -66,8 +110,8 @@ function startInferenceServer() {
       if (!cerrando && code !== 0) {
         avisarMotorCaido(
           "El motor de traduccion se cerro inesperadamente.\n\n" +
-          "Suele deberse a que el puerto 8765 esta ocupado por otro programa, " +
-          "o a que el antivirus bloqueo signai-server.exe.\n\n" +
+          `Suele deberse a que el puerto ${PUERTO_SERVIDOR} esta ocupado por otro ` +
+          "programa, o a que el antivirus bloqueo signai-server.exe.\n\n" +
           "Cierra SignAI por completo y vuelve a abrirlo. El resto de la app " +
           "(juegos y lecciones) sigue funcionando."
         );
@@ -75,6 +119,57 @@ function startInferenceServer() {
     });
   } catch (err) {
     console.error("[server] error al lanzar:", err);
+  }
+}
+
+// Arranca el motor y NO lo da por bueno hasta que /health contesta. Antes nadie
+// llamaba a /health: si el servidor arrancaba pero se colgaba (import lento de
+// torch, hilo del engine muerto), la app no decia absolutamente nada y el
+// usuario se quedaba mirando el spinner de "conectando" indefinidamente.
+async function prepararServidor() {
+  const yaVivo = await sondearSalud(800);
+  if (yaVivo) {
+    console.log("[server] ya hay un motor escuchando; se reutiliza.");
+    return;
+  }
+
+  startInferenceServer();
+  const estado = await esperarServidorSano();
+  if (cerrando) return;
+
+  if (estado && estado.ok) {
+    console.log(`[server] listo (modelo '${estado.modelo}').`);
+    return;
+  }
+
+  // El proceso murio y todavia no habiamos reintentado: una segunda
+  // oportunidad cubre el caso comun de un huerfano que solto el puerto tarde.
+  if (!serverProc && !reintentoHecho) {
+    reintentoHecho = true;
+    console.log("[server] no respondio; se reintenta una vez.");
+    return prepararServidor();
+  }
+
+  if (estado && !estado.ok) {
+    console.error("[server] arranco pero no esta sano:", estado.fallo || estado);
+    avisarMotorCaido(
+      "El motor de traduccion arranco pero no puede reconocer senias.\n\n" +
+      (estado.camara === false
+        ? "No esta recibiendo imagen de la camara. Comprueba que no la este " +
+          "usando otra aplicacion y que SignAI tenga permiso en Privacidad."
+        : "Se detuvo por un error interno.") +
+      "\n\nCierra SignAI por completo y vuelve a abrirlo."
+    );
+    return;
+  }
+
+  if (serverProc) {
+    console.error("[server] sigue vivo pero no responde a /health.");
+    avisarMotorCaido(
+      "El motor de traduccion no termino de arrancar.\n\n" +
+      "Puede que el antivirus lo este analizando, o que el equipo vaya muy " +
+      "justo de memoria.\n\nCierra SignAI por completo y vuelve a abrirlo."
+    );
   }
 }
 
@@ -102,14 +197,17 @@ function stopInferenceServer() {
   if (!proc || proc.exitCode !== null) return;
 
   if (process.platform === "win32" && proc.pid) {
-    try {
-      spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"], {
-        windowsHide: true,
+    // execFile con callback, no spawn: un ChildProcess sin listener 'error'
+    // LANZA si el binario no se puede ejecutar, y esto corre dentro de
+    // before-quit. En un equipo sin taskkill en el PATH, cerrar la app
+    // reventaba el proceso principal y ademas dejaba el servidor vivo.
+    execFile("taskkill", ["/pid", String(proc.pid), "/T", "/F"],
+      { windowsHide: true }, (err) => {
+        if (!err) return;
+        console.error("[server] taskkill fallo, se intenta kill():", err);
+        try { proc.kill(); } catch {}
       });
-      return;
-    } catch (err) {
-      console.error("[server] taskkill fallo, se intenta kill():", err);
-    }
+    return;
   }
 
   try {
@@ -163,8 +261,14 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, permiso, permitir) => {
     permitir(PERMISOS_CONCEDIDOS.has(permiso));
   });
+  // La ruta SINCRONA (navigator.permissions.query, y parte de los caminos de
+  // media) no pasa por el handler de arriba: sin esto se resolvia con el
+  // default de Electron y la lista blanca no se aplicaba de verdad.
+  session.defaultSession.setPermissionCheckHandler(
+    (_wc, permiso) => PERMISOS_CONCEDIDOS.has(permiso)
+  );
 
-  limpiarServidorHuerfano(() => startInferenceServer());
+  limpiarServidorHuerfano(() => { prepararServidor(); });
   createWindow();
 
   app.on("activate", () => {
