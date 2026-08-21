@@ -1,5 +1,8 @@
-const { app, BrowserWindow, Menu, dialog, session } = require("electron");
+const { app, BrowserWindow, Menu, dialog, session, shell } = require("electron");
 const path = require("path");
+const os = require("os");
+const fs = require("fs");
+const crypto = require("crypto");
 const { spawn, execFile } = require("child_process");
 
 const SERVER_EXE = "signai-server.exe";
@@ -17,6 +20,15 @@ let mainWindow = null;
 let cerrando = false;        // true durante el apagado: no avisar de la muerte del servidor
 let errorMostrado = false;   // el aviso de "motor caido" se muestra una sola vez
 let reintentoHecho = false;  // solo se reintenta arrancar el motor una vez
+
+// El motor enciende la camara en cuanto algo se conecta a /ws o /video, asi
+// que hay que poder distinguir "esta app" de "una pagina cualquiera abierta en
+// el navegador del usuario". Este token se le pasa al servidor por entorno y
+// se inyecta como cabecera en las peticiones de NUESTRA sesion de Electron:
+// el codigo del frontend no lo conoce y no hace falta tocarlo, y una web de
+// fuera no puede fabricarlo.
+let tokenServidor = crypto.randomBytes(32).toString("base64url");
+const RUTA_TOKEN = path.join(os.tmpdir(), `signai-${PUERTO_SERVIDOR}.token`);
 
 // Dos ventanas de SignAI pelearian por el puerto 8765 y por la camara: la
 // segunda se queda sin servidor y la app parece rota. La instancia extra cede
@@ -76,12 +88,16 @@ function startInferenceServer() {
   try {
     if (app.isPackaged) {
       const exe = path.join(process.resourcesPath, "signai-server", SERVER_EXE);
-      serverProc = spawn(exe, [], { windowsHide: true });
+      serverProc = spawn(exe, [], {
+        windowsHide: true,
+        env: { ...process.env, SIGNAI_TOKEN: tokenServidor },
+      });
     } else {
       const script = path.join(__dirname, "../Avances/Modelo Transformer/SignAI Server.py");
       serverProc = spawn("py", [script], {
         cwd: path.join(__dirname, "../Avances/Modelo Transformer"),
         windowsHide: true,
+        env: { ...process.env, SIGNAI_TOKEN: tokenServidor },
       });
     }
 
@@ -129,6 +145,14 @@ function startInferenceServer() {
 async function prepararServidor() {
   const yaVivo = await sondearSalud(800);
   if (yaVivo) {
+    // Un motor de una sesion anterior (tipico en desarrollo). Su token es otro,
+    // asi que hay que adoptarlo o nuestras peticiones tendrian un 403.
+    try {
+      const suyo = fs.readFileSync(RUTA_TOKEN, "utf8").trim();
+      if (suyo) tokenServidor = suyo;
+    } catch {
+      // Sin fichero de token: el servidor se arranco a mano y no exige token.
+    }
     console.log("[server] ya hay un motor escuchando; se reutiliza.");
     return;
   }
@@ -215,7 +239,19 @@ function stopInferenceServer() {
   } catch {}
 }
 
+function protocoloDe(url) {
+  try {
+    return new URL(url).protocol;
+  } catch {
+    return "";
+  }
+}
+
 const createWindow = () => {
+  // SIGNAI_USAR_DIST=1 carga la compilacion en vez del servidor de Vite. Es la
+  // unica forma de probar lo que ve el usuario instalado (CSP incluida) sin
+  // pasar por `npm run dist`, que ademas tiene que empaquetar todo Python.
+  const usarDist = app.isPackaged || process.env.SIGNAI_USAR_DIST === "1";
   const win = new BrowserWindow({
     width: 1280,
     height: 720,
@@ -228,15 +264,35 @@ const createWindow = () => {
   });
   mainWindow = win;
 
+  // Sin esto, un window.open o un <a target="_blank"> abria una BrowserWindow
+  // nueva con los webPreferences por defecto, y un enlace normal sacaba a la
+  // ventana principal fuera de la app. Como al empaquetar no hay menu
+  // (Menu.setApplicationMenu(null)), tampoco habia Recargar ni Atras: el
+  // usuario se quedaba atrapado en una web ajena dentro de SignAI.
+  const esExterno = (url) => /^https?:$/.test(protocoloDe(url));
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (esExterno(url)) shell.openExternal(url);
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (evento, url) => {
+    if (url === win.webContents.getURL()) return;
+    const permitido = usarDist
+      ? url.startsWith("file://")
+      : url.startsWith("http://localhost:5173");
+    if (permitido) return;
+    evento.preventDefault();
+    if (esExterno(url)) shell.openExternal(url);
+  });
+
   win.once("ready-to-show", () => win.show());
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
   });
 
-  if (!app.isPackaged) {
-    win.loadURL("http://localhost:5173");
-  } else {
+  if (usarDist) {
     win.loadFile(path.join(__dirname, "../dist/index.html"));
+  } else {
+    win.loadURL("http://localhost:5173");
   }
 };
 
@@ -266,6 +322,37 @@ app.whenReady().then(() => {
   // default de Electron y la lista blanca no se aplicaba de verdad.
   session.defaultSession.setPermissionCheckHandler(
     (_wc, permiso) => PERMISOS_CONCEDIDOS.has(permiso)
+  );
+
+  // Sellar con el token TODO lo que salga de esta sesion hacia el motor. Cubre
+  // el <img> del MJPEG y el handshake del WebSocket, que no pueden poner
+  // cabeceras por su cuenta desde el frontend.
+  // Dos trampas de los patrones de Chromium: NO admiten puerto en el host
+  // (`*://127.0.0.1:8765/*` es invalido y lanza), y el comodin de esquema `*`
+  // solo cubre http y https, no ws. Hay que nombrar ws explicitamente o el
+  // handshake del WebSocket se queda sin token. El puerto se comprueba dentro.
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    {
+      urls: [
+        "http://127.0.0.1/*", "http://localhost/*",
+        "ws://127.0.0.1/*", "ws://localhost/*",
+      ],
+    },
+    (detalles, callback) => {
+      let esElMotor = false;
+      try {
+        esElMotor = new URL(detalles.url).port === String(PUERTO_SERVIDOR);
+      } catch {
+        esElMotor = false;
+      }
+      if (!esElMotor) return callback({});
+      callback({
+        requestHeaders: {
+          ...detalles.requestHeaders,
+          "X-SignAI-Token": tokenServidor,
+        },
+      });
+    }
   );
 
   limpiarServidorHuerfano(() => { prepararServidor(); });

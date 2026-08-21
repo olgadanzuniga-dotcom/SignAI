@@ -36,6 +36,8 @@ from __future__ import annotations
 
 import os
 import json
+import secrets
+import tempfile
 import time
 import asyncio
 import threading
@@ -61,7 +63,7 @@ from SignAI import (
     IDLE, DETECTANDO,
 )
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 import uvicorn
@@ -70,6 +72,31 @@ import uvicorn
 PORT = int(os.environ.get("SIGNAI_PORT", "8765"))
 NUM_MANOS = int(os.environ.get("SIGNAI_MANOS", "1"))   # abecedario = 1 mano
 CAM_INDEX = int(os.environ.get("SIGNAI_CAM", "0"))
+
+# --- Autorizacion ---------------------------------------------------------
+# Este proceso ENCIENDE LA CAMARA cuando algo se conecta a /ws o /video. Sin
+# comprobacion, cualquier pagina abierta en el navegador del usuario podia
+# hacer new WebSocket("ws://127.0.0.1:8765/ws") y encenderle la webcam, y
+# leerse el MJPEG desde un <img> (que ni siquiera manda cabecera Origin).
+# Escuchar solo en 127.0.0.1 no protege de nada: el JavaScript del atacante
+# corre en la maquina de la victima.
+#
+# Electron genera el token, lo pasa por SIGNAI_TOKEN y lo inyecta como
+# cabecera en las peticiones de su propia sesion, asi que el frontend no
+# necesita conocerlo. Una pagina de un navegador normal no puede.
+TOKEN = os.environ.get("SIGNAI_TOKEN", "").strip()
+CABECERA_TOKEN = "x-signai-token"
+# Fichero de respaldo: permite reengancharse a un servidor que ya estaba
+# corriendo (tipico en desarrollo) sin tener que matarlo.
+RUTA_TOKEN = Path(tempfile.gettempdir()) / f"signai-{PORT}.token"
+
+# Origenes legitimos del frontend: Vite en desarrollo, y el propio servidor.
+# El Electron empaquetado carga con file://, que no manda Origin (o manda
+# "null"), asi que la ausencia de Origin no puede tratarse como sospechosa.
+ORIGENES_LOCALES = {
+    "http://localhost:5173", "http://127.0.0.1:5173",
+    f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}",
+}
 JPEG_QUALITY = 70
 IDLE_SLEEP = 0.05      # espera cuando no hay clientes (camara liberada)
 MAX_FALLOS_LECTURA = 30   # lecturas fallidas seguidas antes de dar la camara
@@ -435,6 +462,7 @@ class Engine:
                     if cap is not None:
                         cap.release()
                         cap = None
+                        self._camara_ok = False
                     if hands is not None:
                         try:
                             hands.close()
@@ -710,24 +738,62 @@ class Engine:
             print("[engine] bucle terminado; camara liberada.", flush=True)
 
 
+def origen_sospechoso(origin: str | None) -> bool:
+    """True si el Origin es el de una pagina web ajena.
+
+    Hay tres casos que NO son concluyentes y que por tanto no se rechazan
+    aqui (para eso esta el token):
+      - sin Origin: una peticion de <img> (el MJPEG) no manda ninguno;
+      - "null": documentos opacos;
+      - "file://": es lo que manda Chromium cuando la app va empaquetada y
+        se carga con loadFile. Rechazarlo dejaba la app instalada sin
+        traductor mientras en desarrollo (http://localhost:5173) funcionaba.
+    """
+    if not origin or origin in ("null", "file://"):
+        return False
+    return origin not in ORIGENES_LOCALES
+
+
+def autorizado(headers, query) -> bool:
+    """Un origen web ajeno se rechaza siempre. El token se exige cuando hay
+    uno configurado; si se arranca el servidor a mano (sin SIGNAI_TOKEN) se
+    puede seguir usando `py "SignAI Server.py"` para depurar."""
+    if origen_sospechoso(headers.get("origin")):
+        return False
+    if not TOKEN:
+        return True
+    dado = headers.get(CABECERA_TOKEN) or query.get("token") or ""
+    return secrets.compare_digest(dado, TOKEN)
+
+
 engine = Engine()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     engine.loop = asyncio.get_running_loop()
+    if TOKEN:
+        try:
+            RUTA_TOKEN.write_text(TOKEN, encoding="utf-8")
+        except OSError as e:
+            print(f"[server] no se pudo escribir {RUTA_TOKEN}: {e}", flush=True)
     engine.start()
     yield
     engine.stop()
+    if TOKEN:
+        try:
+            RUTA_TOKEN.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 app = FastAPI(title="SignAI Inference Server", lifespan=lifespan)
-# El servidor solo escucha en 127.0.0.1 y no usa cookies ni auth. Origen "*"
-# con allow_credentials=True es una combinacion invalida (el navegador la
-# rechaza), asi que se deja explicitamente sin credenciales.
+# Solo los origenes del propio frontend. Con "*" cualquier pagina podia
+# leerse /video y /health desde otro sitio. Sin credenciales: no hay cookies
+# ni sesion, la autorizacion va por cabecera de token.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=sorted(ORIGENES_LOCALES),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -751,7 +817,9 @@ async def modelos():
 
 
 @app.post("/modelo")
-async def cambiar_modelo(modelo: str):
+async def cambiar_modelo(modelo: str, request: Request):
+    if not autorizado(request.headers, request.query_params):
+        return JSONResponse({"ok": False, "msg": "No autorizado."}, status_code=403)
     if not engine.set_modelo(modelo):
         return JSONResponse(
             {"ok": False,
@@ -763,7 +831,10 @@ async def cambiar_modelo(modelo: str):
 
 
 @app.get("/video")
-async def video():
+async def video(request: Request):
+    if not autorizado(request.headers, request.query_params):
+        return JSONResponse({"ok": False, "msg": "No autorizado."}, status_code=403)
+
     async def gen():
         # add_consumer() va DENTRO del generador: si se hacia en el cuerpo del
         # endpoint y el cliente abortaba antes de iterar la respuesta, el
@@ -787,6 +858,11 @@ async def video():
 
 @app.websocket("/ws")
 async def ws(websocket: WebSocket):
+    # Comprobar ANTES de accept(): aceptar ya cuenta como consumidor y eso es
+    # justo lo que enciende la camara.
+    if not autorizado(websocket.headers, websocket.query_params):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     engine.add_consumer()
     # Cola acotada: los eventos de status son instantaneas, no historia; si el
