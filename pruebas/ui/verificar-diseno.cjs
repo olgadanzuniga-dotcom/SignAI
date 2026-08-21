@@ -5,6 +5,10 @@
 //     claro/oscuro que se quedo sin migrar);
 //  2. pantallas que se salen del alto de la ventana.
 const { _electron: electron } = require("playwright-core");
+const path = require("path");
+
+// Raiz del repo, para que el script funcione desde cualquier sitio.
+const RAIZ = path.resolve(__dirname, "..", "..");
 
 const RUTAS = [
   ["/", "portada"], ["/Camara", "traductor"], ["/Aprender", "aprender"],
@@ -19,12 +23,23 @@ const TAMANOS = [[1024,640,"minimo"],[1280,720,"normal"],[1920,1000,"grande"]];
 // las superficies que sostienen una ilustracion de linea sobre transparente
 // (cartas del memorama, fichas del deletreo), y lo que va encima del video de
 // la camara nunca ve el fondo de la app.
-const EXCEPCIONES = ["bg-white", "backface-hidden", "bg-black/60", "bg-red-500/90", "fixed inset-0 bg-black"];
+// "bg-black/" a secas y no una opacidad concreta: la regla de ADR-006 es
+// "lo que se dibuja encima del video de la camara", y ahi la opacidad varia
+// segun el sitio (Camara.jsx le pasa bg-black/70 al ServerStatusOverlay,
+// cuyo valor por defecto es bg-black/60). Fijar el numero convertia un
+// retoque de estilo en un falso positivo.
+const EXCEPCIONES = ["bg-white", "backface-hidden", "bg-black/", "bg-red-500/90", "fixed inset-0 bg-black"];
 // Estas si tienen que poder desplazarse: son documentos largos, no pantallas.
 const SE_DESPLAZAN = new Set(["ajustes", "acerca"]);
 
 (async () => {
-  const app = await electron.launch({ args: ["."], cwd: "C:/LSM Traductor" });
+  const app = await electron.launch({
+    args: ["."],
+    cwd: RAIZ,
+    // Contra la compilacion, no contra el servidor de Vite: asi se prueba lo
+    // que ve el usuario instalado y el script no necesita `npm run dev` aparte.
+    env: { ...process.env, SIGNAI_USAR_DIST: "1" },
+  });
   const win = await app.firstWindow();
   await win.waitForLoadState("domcontentloaded");
   await win.waitForFunction(() => location.protocol !== "about:" && !!document.querySelector("#root > *"), null, { timeout: 60000 });
@@ -85,4 +100,6 @@ const SE_DESPLAZAN = new Set(["ajustes", "acerca"]);
   console.log(`cajas a contracorriente del tema: ${sospechas}`);
   console.log(`pantallas que desbordan sin deber: ${desbordes}`);
   await app.close();
+  // Codigo de salida, para poder encadenarlo en npm run test:ui y en CI.
+  process.exit(sospechas === 0 && desbordes === 0 ? 0 : 1);
 })().catch(e => { console.error("ERROR:", e.message); process.exit(1); });

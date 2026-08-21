@@ -8,13 +8,17 @@
 // Uso:  node pruebas/ui/verificar-csp-y-token.cjs
 // Antes hay que haber hecho `npm run build`.
 const { _electron: electron } = require("playwright-core");
+const path = require("path");
+
+// Raiz del repo, para que el script funcione desde cualquier sitio.
+const RAIZ = path.resolve(__dirname, "..", "..");
 
 const RUTAS = ["/", "/Aprender", "/Juegos", "/Ajustes", "/Camara"];
 
 (async () => {
   const app = await electron.launch({
     args: ["."],
-    cwd: "C:/LSM Traductor",
+    cwd: RAIZ,
     env: { ...process.env, SIGNAI_USAR_DIST: "1" },
   });
 

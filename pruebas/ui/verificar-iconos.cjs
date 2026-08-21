@@ -1,8 +1,19 @@
 // Comprueba que donde habia un emoji hay ahora un icono de verdad (un <svg>
 // de lucide) y no solo texto.
 const { _electron: electron } = require("playwright-core");
+const path = require("path");
+
+// Raiz del repo, para que el script funcione desde cualquier sitio.
+const RAIZ = path.resolve(__dirname, "..", "..");
 (async () => {
-  const app = await electron.launch({ args: ["."], cwd: "C:/LSM Traductor" });
+  const app = await electron.launch({
+    args: ["."],
+    cwd: RAIZ,
+    // Contra la compilacion, no contra el servidor de Vite: asi se prueba lo
+    // que ve el usuario instalado y el script no necesita `npm run dev` aparte.
+    env: { ...process.env, SIGNAI_USAR_DIST: "1" },
+  });
+  let conEmoji = 0;
   const win = await app.firstWindow();
   await win.waitForLoadState("domcontentloaded");
   await win.waitForFunction(() => location.protocol !== "about:" && !!document.querySelector("#root > *"), null, { timeout: 60000 });
@@ -36,8 +47,12 @@ const { _electron: electron } = require("playwright-core");
       const m = (document.body.innerText || "").match(re);
       return m ? [...new Set(m)] : [];
     });
-    if (encontrados.length) console.log(`  EMOJI en ${h}: ${encontrados.join(" ")}`);
+    if (encontrados.length) {
+      console.log(`  EMOJI en ${h}: ${encontrados.join(" ")}`);
+      conEmoji++;
+    }
   }
-  console.log("barrido de emojis en el texto visible: terminado");
+  console.log(`barrido de emojis: ${conEmoji} pantallas con emoji`);
   await app.close();
+  process.exit(conEmoji === 0 ? 0 : 1);
 })().catch(e => { console.error("ERROR:", e.message); process.exit(1); });

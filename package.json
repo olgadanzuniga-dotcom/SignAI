@@ -13,7 +13,14 @@
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
     "build:server": ".venv-build\\Scripts\\python.exe -m PyInstaller --noconfirm --distpath dist-server --workpath dist-server/build \"Avances/Modelo Transformer/signai-server.spec\"",
     "dist": "npm run build && npm run build:server && electron-builder",
-    "setup:build-env": "py -m venv .venv-build && .venv-build\\Scripts\\python.exe -m pip install -r requirements-build.txt"
+    "setup:build-env": "py -m venv .venv-build && .venv-build\\Scripts\\python.exe -m pip install -r requirements-build.txt",
+    "test": "npm run test:js && npm run test:py",
+    "test:js": "vitest run",
+    "test:watch": "vitest",
+    "test:py": "py -m unittest discover -s pruebas/unit -p \"test_*.py\" -v",
+    "test:seguridad": "py pruebas/seguridad/probar_autorizacion.py",
+    "test:ui": "npm run build && node pruebas/ui/verificar-diseno.cjs && node pruebas/ui/verificar-iconos.cjs && node pruebas/ui/verificar-csp-y-token.cjs",
+    "lint": "eslint ."
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
@@ -26,6 +33,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
     "vite": "^5.4.10",
+    "vitest": "^4.1.11",
     "wait-on": "^7.2.0"
   },
   "dependencies": {

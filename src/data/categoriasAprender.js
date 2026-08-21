@@ -8,10 +8,19 @@
 const aItems = (labels) =>
   labels.map((label, i) => ({ id: `${label}-${i}`, label }));
 
-// Abecedario (A-Z)
-export const abecedario = aItems(
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
-);
+// Abecedario LSM completo. No es "A-Z" a secas: la Ñ y la RR son letras
+// propias del alfabeto, y ademas son señas que el modelo dinamico YA sabe
+// validar (senasDinamicas en data/palabras.js), asi que dejarlas fuera
+// escondia dos letras que el alumno podia practicar de verdad con la camara.
+// El orden es el del alfabeto español: la Ñ va tras la N y la RR tras la R.
+// Lo vigila pruebas/unit/datos.test.js contra letrasLSM.
+export const abecedario = aItems([
+  ..."ABCDEFGHIJKLMN".split(""),
+  "Ñ",
+  ..."OPQR".split(""),
+  "RR",
+  ..."STUVWXYZ".split(""),
+]);
 
 // Números
 export const numeros = aItems([

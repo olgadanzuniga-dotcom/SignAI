@@ -1,4 +1,8 @@
 const { _electron: electron } = require("playwright-core");
+const path = require("path");
+
+// Raiz del repo, para que el script funcione desde cualquier sitio.
+const RAIZ = path.resolve(__dirname, "..", "..");
 
 const RUTAS = [
   ["/", "portada"], ["/Aprender", "aprender"], ["/Aprendizaje", "aprendizaje"],
@@ -7,7 +11,13 @@ const RUTAS = [
 ];
 
 (async () => {
-  const app = await electron.launch({ args: ["."], cwd: "C:/LSM Traductor" });
+  const app = await electron.launch({
+    args: ["."],
+    cwd: RAIZ,
+    // Contra la compilacion, no contra el servidor de Vite: asi se prueba lo
+    // que ve el usuario instalado y el script no necesita `npm run dev` aparte.
+    env: { ...process.env, SIGNAI_USAR_DIST: "1" },
+  });
   const win = await app.firstWindow();
   await win.waitForLoadState("domcontentloaded");
   await win.waitForFunction(

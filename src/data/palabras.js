@@ -30,17 +30,23 @@ export const palabrasDesafio = [
 // Distractores del Quiz. Se deduplican al exportar: la lista se escribió a
 // mano y tenía repetidos ("Puerta", "Ventana"), lo que hacía que una misma
 // pregunta pudiera mostrar dos opciones idénticas.
+//
+// Tampoco puede haber SINÓNIMOS de una respuesta correcta. Quiz.jsx filtra
+// por igualdad exacta, así que no los ve: ofrecer "Coche" junto a "Carro", o
+// "Camión" junto a "Autobús" (en México camión ES la palabra normal para
+// autobús), marcaba como error una respuesta que cualquier hispanohablante
+// daría por buena. Lo vigila pruebas/unit/datos.test.js.
 const distractoresQuiz = [
   "Montaña","Libro","Ventana","Cielo","Computadora","Playa","Sombrero","Zapato","Árbol","Río",
   "Teléfono","Escuela","Fuego","Nube","Camisa","Lámpara","Silla","Mesa","Reloj","Puerta",
   "Bicicleta","Chocolate","Pelota","Jardín","Estrella","Café","Música","Martillo","Avión","Hospital",
   "Ciudad","Isla","Tren","Dinero","Llave","Espejo","Mochila","Ratón","Cuaderno","Luna",
-  "Sol","Flor","Banco","Pan","Agua","Naranja","Camión","Calle","Globo","Pintura",
+  "Sol","Flor","Banco","Pan","Agua","Naranja","Calle","Globo","Pintura",
   "Carpeta","Ventilador","Escalera","Corazón","Botella","Cama","Almohada","Toalla","Cocina","Plato",
   "Cuchara","Tenedor","Radio","Televisión","Doctor","Policía","Parque","Tierra","Arena","Mar",
   "Hielo","Nieve","Papel","Tijeras","Guitarra","Zapatería","Biblioteca","Teatro","Museo","Restaurante",
   "Pastel","Helado","Fresa","Limón","Toro","Caballo","León","Tigre","Serpiente","Tortuga",
-  "Lápiz","Calculadora","Coche","Autobús","Semáforo","Puente","Castillo","Molino","Cohete","Mapa",
+  "Lápiz","Calculadora","Autobús","Semáforo","Puente","Castillo","Molino","Cohete","Mapa",
   "Puerta","Escudo","Bandera","Campana","Tambor","Flauta","Violín","Piano","Teclado","Monitor",
   "Impresora","Cable","Router","Servidor","Pantalla","Auricular","Micrófono","Batería","Motor","Rueda",
   "Ventana","Tejado","Pared","Piso","Techo","Columna","Pasillo","Jardinería","Huerto","Semilla",
