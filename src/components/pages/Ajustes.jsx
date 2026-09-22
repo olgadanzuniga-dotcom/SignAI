@@ -6,6 +6,7 @@ import Tutorial from "../common/Tutorial";
 import PageLayout from "../common/PageLayout";
 import ResponsiveContainer from "../common/ResponsiveContainer";
 import ContentCard from "../common/ContentCard";
+import { guardar, leer } from "../../utils/almacen";
 
 const AJUSTES_TUTORIAL_STEPS = [
   {
@@ -163,7 +164,7 @@ export default function Ajustes({ sidebarOpen }) {
 
   const [camaras, setCamaras] = useState([]);
   const [camaraSeleccionada, setCamaraSeleccionada] = useState(
-    localStorage.getItem("camara_lsm") || ""
+    leer("camara_lsm", "")
   );
 
   useEffect(() => {
@@ -180,13 +181,19 @@ export default function Ajustes({ sidebarOpen }) {
 
   const cambiarCamara = (id) => {
     setCamaraSeleccionada(id);
-    localStorage.setItem("camara_lsm", id);
+    guardar("camara_lsm", id);
   };
 
   const vocesEs = voices.filter((v) => v.lang.toLowerCase().startsWith("es"));
 
   return (
-    <PageLayout contentClassName="items-center justify-center min-h-screen py-6 sm:py-10 2xl:py-14 text-texto transition-all duration-700 ease-in-out">
+    // Sin `min-h-screen`: el <main> ya mide justo la ventana, así que pedir
+    // 100vh dentro del marco (que tiene relleno propio) sacaba barra de
+    // desplazamiento incluso en un monitor donde Ajustes cabía entero.
+    <PageLayout
+      contentClassName="items-center justify-center text-texto transition-all duration-700 ease-in-out"
+      contentStyle={{ paddingBlock: "clamp(1rem, 3vh, 3.5rem)" }}
+    >
 
       <ResponsiveContainer
         size={sidebarOpen ? "md" : "lg"}

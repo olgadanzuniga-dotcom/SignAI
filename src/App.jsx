@@ -4,6 +4,9 @@ import { Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
 import { CSSTransition, TransitionGroup } from "react-transition-group";
 
 import Sidebar from "./components/Sidebar";
+import ErrorBoundary from "./components/common/ErrorBoundary";
+import useMediaQuery, { CONSULTA_ESTRECHA } from "./hooks/useMediaQuery";
+import { leer } from "./utils/almacen";
 import useScrolled from "./hooks/useScrolled";
 import { useThemeContext } from "./context/ThemeContext";
 
@@ -26,13 +29,21 @@ import "./transitions.css";
 // Layout A: Páginas Estándar (definido fuera para que React no lo remonte en cada render)
 function MainLayout({ sidebarOpen, tutorialActivo, setSidebarOpen }) {
   const scrolled = useScrolled(80);
+  const estrecha = useMediaQuery(CONSULTA_ESTRECHA);
   const showMenu = !sidebarOpen && !tutorialActivo;
 
   return (
-    <div className="p-6 w-full max-w-7xl mx-auto flex-1 flex flex-col">
+    // El relleno escala con la ventana: 24px fijos son mucho en 600px de alto
+    // y poco en un monitor grande. `min-h-0` deja que el hijo decida su alto
+    // en vez de heredar el mínimo automático del flex.
+    <div
+      className="w-full max-w-7xl mx-auto flex-1 flex flex-col min-h-0"
+      style={{ padding: "clamp(0.75rem, 1.6vw, 1.5rem)" }}
+    >
       {showMenu && (
         <button
           onClick={() => setSidebarOpen(true)}
+          aria-label="Abrir menú"
           className="absolute top-4 left-8 z-50 bg-superficie text-texto
                      shadow-md rounded-md p-2 hover:bg-superficie-2
                      transition flex items-center justify-center"
@@ -48,11 +59,12 @@ function MainLayout({ sidebarOpen, tutorialActivo, setSidebarOpen }) {
             bg-fondo/80 backdrop-blur-md
             border-b border-borde
             transition-all duration-500 ease-out
-            ${sidebarOpen ? "left-60" : "left-0"}
+            ${sidebarOpen && !estrecha ? "left-60" : "left-0"}
             ${scrolled ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0 pointer-events-none"}`}
         >
           <button
             onClick={() => setSidebarOpen(true)}
+            aria-label="Abrir menú"
             className="bg-superficie text-texto
                        shadow-md rounded-md p-2 hover:bg-superficie-2
                        transition flex items-center justify-center"
@@ -79,11 +91,16 @@ function CleanLayout() {
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [animating, setAnimating] = useState(false);
-  const [tutorialActivo, setTutorialActivo] = useState(() => !localStorage.getItem("tourSignAICompleted"));
+  const [tutorialActivo, setTutorialActivo] = useState(() => !leer("tourSignAICompleted"));
   const location = useLocation();
   const nodeRef = useRef(null);
   const { isDark } = useThemeContext();
   const prevDarkRef = useRef(isDark);
+  const zoomTimersRef = useRef([]);
+
+  // Por debajo de 1024 no sobran 240px: la barra lateral se superpone en vez
+  // de empujar el contenido (ver `useMediaQuery`).
+  const estrecha = useMediaQuery(CONSULTA_ESTRECHA);
 
   // Animación de zoom al cambiar de tema (reacciona al ThemeContext).
   useEffect(() => {
@@ -92,20 +109,38 @@ export default function App() {
     triggerAnimation();
   }, [isDark, animating]);
 
+  // Los temporizadores del zoom tocan el DOM a mano: si la app se desmonta a
+  // medias (recarga tras un error), dejarían clases de animación colgadas.
+  useEffect(() => () => zoomTimersRef.current.forEach(clearTimeout), []);
+
+  // Escape cierra el menú. Sin esto, con la barra superpuesta y el velo
+  // delante, quien navega con teclado se queda sin salida.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const alPulsar = (e) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", alPulsar);
+    return () => window.removeEventListener("keydown", alPulsar);
+  }, [sidebarOpen]);
+
   const triggerAnimation = () => {
     setAnimating(true);
     const wrapper = document.getElementById("app-wrapper");
-    if (wrapper) {
-      wrapper.classList.add("theme-zoom-out");
+    if (!wrapper) return setAnimating(false);
+    wrapper.classList.add("theme-zoom-out");
+    zoomTimersRef.current.push(
       setTimeout(() => {
         wrapper.classList.remove("theme-zoom-out");
         wrapper.classList.add("theme-zoom-in");
-        setTimeout(() => {
-          wrapper.classList.remove("theme-zoom-in");
-          setAnimating(false);
-        }, 400);
-      }, 250);
-    }
+        zoomTimersRef.current.push(
+          setTimeout(() => {
+            wrapper.classList.remove("theme-zoom-in");
+            setAnimating(false);
+          }, 400)
+        );
+      }, 250)
+    );
   };
 
   return (
@@ -116,9 +151,21 @@ export default function App() {
     >
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
 
+      {/* Velo del modo superpuesto. En una ventana estrecha la barra lateral
+          no puede robarle 240px al contenido, así que se pone encima; el velo
+          es lo que deja claro que hay algo abierto y da dónde pulsar para
+          cerrarlo. */}
+      {sidebarOpen && estrecha && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-[2px]"
+        />
+      )}
+
       <div
-        className={`flex-1 flex flex-col h-full transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-          sidebarOpen ? "ml-60" : "ml-0"
+        className={`flex-1 flex flex-col h-full min-w-0 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          sidebarOpen && !estrecha ? "ml-60" : "ml-0"
         }`}
       >
         <main className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden scroll-smooth">
@@ -132,6 +179,11 @@ export default function App() {
                 unmountOnExit
               >
                 <div ref={nodeRef} className="flex-1 flex flex-col w-full">
+                  {/* Un fallo dentro de una pantalla no debe llevarse la app
+                      entera: aquí se atrapa dejando en pie el marco (barra
+                      lateral incluida), y `resetKey` limpia el error en cuanto
+                      el usuario navega a otro sitio. */}
+                  <ErrorBoundary resetKey={location.pathname}>
                   <Routes location={location}>
                     
                     <Route element={<MainLayout sidebarOpen={sidebarOpen} tutorialActivo={tutorialActivo} setSidebarOpen={setSidebarOpen} />}>
@@ -157,6 +209,7 @@ export default function App() {
                     <Route path="*" element={<Navigate to="/" replace />} />
 
                   </Routes>
+                  </ErrorBoundary>
                 </div>
               </CSSTransition>
             </TransitionGroup>

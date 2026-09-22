@@ -16,12 +16,14 @@ base = os.path.dirname(os.path.abspath(SPEC))
 # mediapipe carga sus grafos/.tflite como archivos de datos.
 datas = collect_data_files("mediapipe")
 
-# Solo se distribuyen los modelos activos; las carpetas con prefijo "_"
-# (_viejos, _cmp_*) son artefactos de trabajo. comun.py resuelve modelos/
-# relativo a __file__, que en el bundle apunta a _internal/, asi que este
-# destino relativo queda donde el servidor lo espera.
+# Solo se distribuye el modelo unificado: cubre senias estaticas y dinamicas
+# en un solo juego de pesos, asi que "estatico" y "dinamico" ya solo sirven
+# para entrenar y comparar. Meterlos sumaba ~40 MB al instalador sin que la
+# app los usara. comun.py resuelve modelos/ relativo a __file__, que en el
+# bundle apunta a _internal/, asi que este destino relativo queda donde el
+# servidor lo espera.
 ARCHIVOS_MODELO = ("signai_transformer.pth", "label_map.json", "feature_meta.json")
-for nombre in ("estatico", "dinamico", "unificado"):
+for nombre in ("unificado",):
     carpeta = os.path.join(base, "modelos", nombre)
     if os.path.isdir(carpeta):
         for archivo in ARCHIVOS_MODELO:

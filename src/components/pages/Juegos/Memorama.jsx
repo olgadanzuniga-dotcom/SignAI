@@ -137,13 +137,20 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
   };
 
   return (
+    // Ni `min-h-screen` (el <main> ya mide la ventana: pedir 100vh dentro de
+    // un contenedor con relleno saca barra de desplazamiento sola) ni
+    // `overflow-hidden` (lo que no cupiera quedaba cortado y sin alcanzar).
     <PageLayout
-      className="min-h-screen overflow-hidden"
-      contentClassName="items-center pt-14 pb-10 px-4 sm:px-6 lg:px-8 2xl:px-12 text-texto"
+      contentClassName="items-center text-texto"
+      contentStyle={{
+        paddingTop: "clamp(3.25rem, 7vh, 4.5rem)",
+        paddingBottom: "clamp(0.75rem, 3vh, 2.5rem)",
+        paddingInline: "clamp(0.75rem, 2.5vw, 3rem)",
+      }}
     >
       <PageHeader />
 
-      <div className="z-10 w-full max-w-6xl 2xl:max-w-[1500px] px-4 sm:px-6 2xl:px-8 flex flex-col items-center">
+      <div className="z-10 w-full max-w-6xl 2xl:max-w-[1500px] flex flex-col items-center">
         
         {juegoTerminado ? (
           <GameOverCard
@@ -193,8 +200,20 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
             />
 
             <div className="w-full relative mt-2">
-              <div data-tutorial="memorama-tablero" className="relative bg-superficie rounded-[2rem] shadow-xl border border-borde p-4 sm:p-6 lg:p-8 2xl:p-10">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-5 lg:gap-6 2xl:gap-8 mx-auto w-full">
+              {/* Catorce cartas: con menos de siete columnas salen tres o
+                  cuatro filas y el tablero se sale de la ventana — en el
+                  mínimo llegaba a quedar 519px por debajo del borde, o sea
+                  que no se podía jugar. Siete columnas son siempre dos filas,
+                  y las cartas encogen con el ancho en vez de tirar de alto. */}
+              <div
+                data-tutorial="memorama-tablero"
+                className="relative bg-superficie rounded-[2rem] shadow-xl border border-borde"
+                style={{ padding: "clamp(0.6rem, 1.6vw, 2.5rem)" }}
+              >
+                <div
+                  className="grid grid-cols-4 sm:grid-cols-7 mx-auto w-full"
+                  style={{ gap: "clamp(0.4rem, 1.1vw, 2rem)" }}
+                >
                   {cards.map((card, index) => (
                     <motion.div
                       key={card.id}
@@ -225,15 +244,24 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
                             desaparecen. Por eso aquí el texto también va a
                             color fijo y no a `text-texto`. */}
                         <div
-                          className="absolute inset-0 backface-hidden rounded-2xl border-4 border-[rgb(var(--cat-1))] bg-white shadow-xl flex flex-col items-center justify-center p-4 overflow-hidden"
-                          style={{ transform: "rotateY(180deg)" }}
+                          className="absolute inset-0 backface-hidden rounded-2xl border-4 border-[rgb(var(--cat-1))] bg-white shadow-xl flex flex-col items-center justify-center overflow-hidden"
+                          style={{ transform: "rotateY(180deg)", padding: "clamp(0.25rem, 0.6vw, 1rem)" }}
                         >
+                          {/* La imagen se queda con el hueco que sobre
+                              (`flex-1 min-h-0`) y la palabra reserva el suyo:
+                              antes iban a 3/4 y 1/4 del alto pase lo que
+                              pase, y «HAMBURGUESA» se salía 16px por el lado
+                              — la carta va `overflow-hidden`, así que se
+                              comía las letras. */}
                           <img
                             src={card.img}
                             alt={card.palabra}
-                            className="w-3/4 h-3/4 object-contain mb-2"
+                            className="w-3/4 min-h-0 flex-1 object-contain"
                           />
-                          <p className={`font-bold text-xs sm:text-sm lg:text-base 2xl:text-lg uppercase tracking-wide text-center ${card.tipo === "seña" ? "text-[#4f46e5]" : "text-[#4b5563]"}`}>
+                          <p
+                            style={{ fontSize: "clamp(0.6875rem, 0.9vw, 1.125rem)" }}
+                            className={`w-full shrink-0 break-words pt-0.5 text-center font-bold uppercase leading-tight tracking-tight ${card.tipo === "seña" ? "text-[#4f46e5]" : "text-[#4b5563]"}`}
+                          >
                             {card.palabra}
                           </p>
 

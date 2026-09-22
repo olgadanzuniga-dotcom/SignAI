@@ -90,7 +90,12 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
     return palabrasDesafio;
   }, [modelo]);
 
-  const objetivo = juegoIniciado ? rondas[rondaActual] || "" : "";
+  // El modelo activo es estado del servidor y puede cambiar a media partida
+  // (otra ventana, el selector del traductor): la lista de rondas se acorta y
+  // `rondaActual` se queda apuntando fuera. Sin este ajuste el reto mostraba
+  // «???» con el cronómetro corriendo y no había forma de acertar.
+  const indiceRonda = rondas.length ? Math.min(rondaActual, rondas.length - 1) : 0;
+  const objetivo = juegoIniciado ? rondas[indiceRonda] || "" : "";
   objetivoRef.current = objetivo;
 
   // La ronda arranca cuando el stream de la cámara ya está en pantalla.
@@ -123,8 +128,8 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
     setPuntaje((prev) => prev + 1);
 
     avanceRef.current = setTimeout(() => {
-      if (rondaActual + 1 < rondas.length) {
-        setRondaActual((prev) => prev + 1);
+      if (indiceRonda + 1 < rondas.length) {
+        setRondaActual(indiceRonda + 1);
         setTiempoRestante(TIEMPO_POR_SENA);
         setEstadoRonda("jugando");
       } else {
@@ -151,10 +156,16 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
   };
 
   return (
-    // pt-14 empuja el contenido justo debajo del botón Volver
+    // El relleno superior empuja el contenido justo debajo del botón Volver;
+    // en `clamp()` para que en una ventana baja no se coma el hueco de la
+    // cámara, que es lo único que aquí importa de verdad.
     <PageLayout
-      className="min-h-screen"
-      contentClassName="pt-14 px-4 sm:px-6 lg:px-8 2xl:px-12 pb-6 text-texto"
+      contentClassName="text-texto"
+      contentStyle={{
+        paddingTop: "clamp(3.25rem, 7vh, 4.5rem)",
+        paddingBottom: "clamp(0.5rem, 2vh, 1.5rem)",
+        paddingInline: "clamp(0.75rem, 2.5vw, 3rem)",
+      }}
     >
 
       <PageHeader />
@@ -213,7 +224,10 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
             </div>
 
             {/* flex-1: esta caja ocupa todo el espacio vertical sobrante */}
-            <div className="flex-1 w-full bg-superficie-2 rounded-3xl flex flex-col items-center justify-center border-2 border-dashed border-borde relative overflow-hidden shadow-inner min-h-[300px]">
+            <div
+              style={{ minHeight: "clamp(9rem, 34vh, 25rem)" }}
+              className="flex-1 w-full bg-superficie-2 rounded-3xl flex flex-col items-center justify-center border-2 border-dashed border-borde relative overflow-hidden shadow-inner"
+            >
 
               {cameraActive ? (
                 <>
@@ -282,7 +296,7 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
               <span className="text-xs 2xl:text-sm font-bold tracking-widest text-acento uppercase mb-0.5 2xl:mb-1">Haz la seña para:</span>
               <AnimatePresence mode="wait">
                 <motion.h2
-                  key={rondaActual}
+                  key={indiceRonda}
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
                   className="text-4xl sm:text-5xl 2xl:text-7xl font-black text-texto tracking-wider leading-none"
                 >

@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { guardar } from "../utils/almacen";
 
 // Fuente única de verdad del tema. main.jsx aplica la clase "dark" en <html>
 // antes del primer render (para evitar el flash); a partir de ahí este
@@ -18,7 +19,7 @@ export function ThemeProvider({ children }) {
   // la app sigue respetando el tema del sistema en el próximo arranque.
   const setTheme = useCallback((t) => {
     setThemeState(t);
-    localStorage.setItem("lsm_theme", t);
+    guardar("lsm_theme", t);
   }, []);
 
   return (

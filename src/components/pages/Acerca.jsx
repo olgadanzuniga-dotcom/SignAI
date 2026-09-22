@@ -49,8 +49,11 @@ export default function Acerca({ sidebarOpen }) {
   };
 
   return (
+    // Ver la nota de Ajustes: `min-h-screen` dentro del marco con relleno
+    // sacaba 48px de desplazamiento en cualquier pantalla, incluso en 2560.
     <PageLayout
-      contentClassName="items-center justify-center min-h-screen text-center text-texto transition-all duration-700 ease-in-out"
+      contentClassName="items-center justify-center text-center text-texto transition-all duration-700 ease-in-out"
+      contentStyle={{ paddingBlock: "clamp(0.5rem, 2vh, 2rem)" }}
     >
 
       <ResponsiveContainer

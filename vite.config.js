@@ -36,10 +36,15 @@ function removeThreeClockDeprecation() {
 //   estilos en línea; sin eso la interfaz se queda sin animaciones.
 // - connect-src abre solo el motor local y ElevenLabs (la voz de pago).
 // - img-src incluye el motor porque el <img> del traductor consume su MJPEG.
+// - script-src añade 'wasm-unsafe-eval': el cargador de glTF de drei instancia
+//   el decodificador Meshopt, que es un módulo WebAssembly. Sin esa palabra
+//   clave la lección de abecedario lanzaba «Refused to compile or instantiate
+//   WebAssembly module» **solo en la app instalada**. Es la forma acotada de
+//   permitirlo: habilita WebAssembly y NO habilita `eval()` de JavaScript.
 function cspDeProduccion() {
   const csp = [
     "default-src 'self'",
-    "script-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: http://" + SIGNAI_HOST,
     "media-src 'self' data: blob:",

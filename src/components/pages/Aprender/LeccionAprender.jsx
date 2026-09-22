@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useRef, useCallback, Suspense } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { StopCircle, CheckCircle, ScanLine, ArrowRight, Check } from "lucide-react";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls, useGLTF, Center } from "@react-three/drei";
+import VisorMano, { RUTA_MANO } from "../../common/VisorMano";
 import useCamera from "../../../hooks/useCamera";
 import useSignServer from "../../../hooks/useSignServer";
 import useCerrarSidebar from "../../../hooks/useCerrarSidebar";
@@ -65,19 +64,10 @@ const LECCION_TUTORIAL_STEPS_CAMARA = [
   },
 ];
 
-function ModeloMano({ modeloPath }) {
-  const { scene } = useGLTF(modeloPath);
-  return (
-    <Center>
-      <primitive object={scene} scale={0.07} />
-    </Center>
-  );
-}
-
 export default function LeccionAprender({
   items,
   itemInicial,
-  modeloPath = "/Mano.glb",
+  modeloPath = RUTA_MANO,
   setSidebarOpen,
   validarConModelo = false,
 }) {
@@ -88,8 +78,11 @@ export default function LeccionAprender({
   });
   const [mostrarExito, setMostrarExito] = useState(false);
 
-  const itemActual = items[indiceActual];
-  const objetivo = (itemActual.label || "").toUpperCase();
+  // Una categoría vacía (o un índice que se salió de rango tras cambiar de
+  // lección) dejaba `itemActual` en undefined y el render lanzaba. La ruta ya
+  // filtra las categorías vacías, pero el componente no debe depender de eso.
+  const itemActual = items[indiceActual] ?? items[0];
+  const objetivo = (itemActual?.label || "").toUpperCase();
 
   // --- Cámara manual (categorías que NO usan el modelo) ---
   const {
@@ -164,13 +157,23 @@ export default function LeccionAprender({
 
   return (
     <PageLayout
-      className="min-h-screen"
-      contentClassName="pt-14 px-4 sm:px-6 lg:px-8 pb-4 sm:pb-8 text-texto"
+      contentClassName="text-texto"
+      contentStyle={{
+        paddingTop: "clamp(3.25rem, 7vh, 4.5rem)",
+        paddingBottom: "clamp(0.5rem, 2.5vh, 2rem)",
+        paddingInline: "clamp(0.75rem, 2.5vw, 2rem)",
+      }}
     >
       <PageHeader />
 
-      <div className="w-full max-w-7xl 2xl:max-w-[1600px] mx-auto mt-4 sm:mt-6 lg:mt-8 flex-1 min-h-0 flex flex-col">
-        <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 sm:gap-6 lg:gap-8 flex-1 min-h-0">
+      <div
+        className="w-full max-w-7xl 2xl:max-w-[1600px] mx-auto flex-1 min-h-0 flex flex-col"
+        style={{ marginTop: "clamp(0.5rem, 2vh, 2rem)" }}
+      >
+        <div
+          className="grid grid-cols-1 md:grid-cols-[3fr_2fr] flex-1 min-h-0"
+          style={{ gap: "clamp(0.6rem, 1.6vw, 2rem)" }}
+        >
           <div className="aspect-video md:aspect-auto bg-superficie-2 rounded-3xl flex flex-col items-center justify-center border-2 border-dashed border-borde relative overflow-hidden shadow-inner">
             {camaraActiva ? (
               <>
@@ -288,7 +291,7 @@ export default function LeccionAprender({
                 descripcion={
                   <>
                     Dale clic a iniciar para empezar a practicar desde{" "}
-                    <strong className="text-acento">{items[0].label}</strong>
+                    <strong className="text-acento">{items[0]?.label}</strong>
                   </>
                 }
               />
@@ -305,34 +308,20 @@ export default function LeccionAprender({
               ></div>
 
               <div className="flex-1 w-full h-full cursor-grab active:cursor-grabbing relative z-0">
-                <Suspense
-                  fallback={
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-acento border-t-transparent"></div>
-                    </div>
-                  }
-                >
-                  <Canvas camera={{ position: [0, 0, 25], fov: 25 }}>
-                    <ambientLight intensity={0.8} />
-                    <directionalLight position={[10, 10, 5]} intensity={1.2} />
-                    <directionalLight position={[-10, -10, -5]} intensity={0.4} />
-                    <ModeloMano modeloPath={modeloPath} />
-                    <OrbitControls enableZoom={true} />
-                  </Canvas>
-                </Suspense>
+                <VisorMano modeloPath={modeloPath} />
               </div>
             </div>
 
             <div data-tutorial="leccion-item" className="min-h-0 bg-superficie rounded-3xl shadow-xl border border-borde flex items-center justify-center overflow-hidden px-6">
               <AnimatePresence mode="wait">
                 <motion.span
-                  key={itemActual.id}
+                  key={itemActual?.id}
                   initial={{ scale: 0.8, opacity: 0, y: -20 }}
                   animate={{ scale: 1, opacity: 1, y: 0 }}
                   exit={{ scale: 1.2, opacity: 0, y: 20 }}
-                  className={`${tamanoLabel(itemActual.label)} font-black leading-tight select-none text-texto text-center`}
+                  className={`${tamanoLabel(itemActual?.label || "")} font-black leading-tight select-none text-texto text-center`}
                 >
-                  {itemActual.label}
+                  {itemActual?.label}
                 </motion.span>
               </AnimatePresence>
             </div>

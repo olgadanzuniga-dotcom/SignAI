@@ -91,9 +91,36 @@ export default function useSignServer({
     let intentosFallidos = 0;
     let preferenciaAplicada = false;
 
+    // Reintento con el mismo backoff que usa `onclose`. Se saca aparte porque
+    // ahora hay dos sitios que pueden fallar: el cierre y el propio
+    // constructor.
+    const reintentar = () => {
+      if (stopped) return;
+      intentosFallidos += 1;
+      if (intentosFallidos >= DOWN_AFTER_ATTEMPTS) setServerDown(true);
+      const delay = Math.min(
+        RETRY_BASE_MS * 2 ** (intentosFallidos - 1),
+        RETRY_MAX_MS
+      );
+      reconnectTimer = setTimeout(connect, delay);
+    };
+
     const connect = () => {
       if (stopped) return;
-      ws = new WebSocket(WS_URL);
+      try {
+        ws = new WebSocket(WS_URL);
+      } catch (err) {
+        // `new WebSocket` lanza de forma SÍNCRONA si la URL no es válida —
+        // p. ej. con un VITE_SIGNAI_HOST mal escrito en el .env. Al pasar
+        // dentro de un efecto, la excepción subía y se llevaba por delante
+        // la pantalla entera en vez de mostrar «no se pudo conectar».
+        console.error("No se pudo abrir el WebSocket del motor:", err);
+        setEngineError(
+          "La dirección del motor de traducción no es válida (VITE_SIGNAI_HOST)."
+        );
+        reintentar();
+        return;
+      }
 
       ws.onopen = () => {
         intentosFallidos = 0;
@@ -109,14 +136,7 @@ export default function useSignServer({
       ws.onclose = () => {
         setConnected(false);
         setVideoUrl(""); // el stream también murió; se repide al reconectar
-        if (stopped) return;
-        intentosFallidos += 1;
-        if (intentosFallidos >= DOWN_AFTER_ATTEMPTS) setServerDown(true);
-        const delay = Math.min(
-          RETRY_BASE_MS * 2 ** (intentosFallidos - 1),
-          RETRY_MAX_MS
-        );
-        reconnectTimer = setTimeout(connect, delay);
+        reintentar();
       };
 
       ws.onerror = () => {

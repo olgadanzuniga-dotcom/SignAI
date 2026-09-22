@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { leer } from "../utils/almacen";
 
 export default function useCamera({ autoStart = false, constraintsList } = {}) {
   const videoRef = useRef(null);
@@ -14,11 +15,9 @@ export default function useCamera({ autoStart = false, constraintsList } = {}) {
     { video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: "user" } },
   ];
 
-  const applyDeviceId = (c) => {
-    const saved = localStorage.getItem("camara_lsm");
-    if (!saved) return c;
-    if (c.video === true) return { video: { deviceId: { exact: saved } } };
-    return { ...c, video: { ...c.video, deviceId: { exact: saved } } };
+  const conDispositivo = (c, id) => {
+    if (c.video === true) return { video: { deviceId: { exact: id } } };
+    return { ...c, video: { ...c.video, deviceId: { exact: id } } };
   };
 
   const stop = useCallback(() => {
@@ -40,9 +39,22 @@ export default function useCamera({ autoStart = false, constraintsList } = {}) {
       return false;
     }
 
-    const tries = (constraintsList || defaultList).map(applyDeviceId);
+    const base = constraintsList || defaultList;
+    const guardada = leer("camara_lsm");
 
-    for (const c of tries) {
+    // Primero la cámara elegida en Ajustes; si ya no está conectada (portátil
+    // que perdió la webcam USB, o un `deviceId` de otra sesión), los mismos
+    // intentos SIN fijarla. Antes el `deviceId: { exact }` se le pegaba a las
+    // cuatro combinaciones, así que las cuatro fallaban con
+    // `OverconstrainedError` — que además es el único error que no producía
+    // mensaje. Resultado: pulsar «Iniciar cámara» no hacía absolutamente
+    // nada, sin imagen y sin explicación.
+    const intentos = guardada
+      ? [...base.map((c) => conDispositivo(c, guardada)), ...base]
+      : base;
+
+    let ultimoFallo = null;
+    for (const c of intentos) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia(c);
         streamRef.current = stream;
@@ -51,6 +63,9 @@ export default function useCamera({ autoStart = false, constraintsList } = {}) {
         setLoading(false);
         return true;
       } catch (err) {
+        ultimoFallo = err;
+        // Permiso denegado no se arregla probando otra resolución: si se
+        // siguiera intentando, Windows enseñaría el aviso una vez por intento.
         if (err?.name === "NotAllowedError") {
           setErrorMsg("Acceso denegado. Permite el uso de la cámara en tu navegador.");
           setLoading(false);
@@ -63,6 +78,15 @@ export default function useCamera({ autoStart = false, constraintsList } = {}) {
         }
       }
     }
+
+    // Ningún intento funcionó: siempre hay que decir algo, aunque el último
+    // error fuese `OverconstrainedError`.
+    setErrorMsg((previo) =>
+      previo ||
+      (ultimoFallo?.name === "NotReadableError"
+        ? "Otra aplicación está usando la cámara. Cierra Zoom, Teams o Meet e inténtalo otra vez."
+        : "No se pudo abrir ninguna cámara. Revisa que esté conectada y que ningún otro programa la esté usando.")
+    );
     setLoading(false);
     return false;
   }, [constraintsList, stop]);

@@ -5,10 +5,22 @@ import App from "./App";
 import ScrollToTop from "./components/ScrollToTop";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import { ThemeProvider } from "./context/ThemeContext";
+import { leer } from "./utils/almacen";
 import "./index.css";
 
+// Todo lo que se escapa del render de React acaba aquí. En Electron no hay
+// consola a la vista para el usuario, pero sí en `npm run dev` y en los
+// sondeos de pruebas/ui: sin esto, un fallo asíncrono (una promesa rechazada
+// en un hook, un recurso que no carga) se perdía sin dejar rastro.
+window.addEventListener("error", (e) => {
+  console.error("[SignAI] error no atrapado:", e.message, `${e.filename}:${e.lineno}`);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("[SignAI] promesa rechazada sin atrapar:", e.reason);
+});
+
 // Aplica el tema guardado ANTES de que React renderice algo
-const savedTheme = localStorage.getItem("lsm_theme");
+const savedTheme = leer("lsm_theme");
 const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
 // Si el usuario nunca eligió tema, respeta el del sistema

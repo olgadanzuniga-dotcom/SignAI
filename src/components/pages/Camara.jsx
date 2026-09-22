@@ -66,6 +66,10 @@ export default function Camara({ setSidebarOpen }) {
   const { speak } = useSpeech();
   const [fadeIn, setFadeIn] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  // El WebSocket puede seguir vivo y el stream MJPEG haberse cortado (el motor
+  // perdió la cámara, el <img> se quedó a medias). Sin esto la pantalla se
+  // quedaba en negro con el icono de imagen rota y ni un mensaje.
+  const [videoFallo, setVideoFallo] = useState(false);
 
   const { texto, vacio, ultimaPalabra, deletreando, agregar, espacio, borrar, limpiar } =
     useTranscripcion();
@@ -97,6 +101,10 @@ export default function Camara({ setSidebarOpen }) {
     const t = setTimeout(() => setFadeIn(true), 120);
     return () => clearTimeout(t);
   }, []);
+
+  // Cada reconexión trae una URL nueva (lleva cache-bust): hay que volver a
+  // darle una oportunidad al stream.
+  useEffect(() => setVideoFallo(false), [videoUrl]);
 
   const handleEspacio = useCallback(() => {
     // Sin nada que cerrar (mensaje vacío o ya terminado en espacio) no hay que
@@ -158,11 +166,12 @@ export default function Camara({ setSidebarOpen }) {
         fadeIn ? "opacity-100" : "opacity-0"
       } transition-opacity duration-500`}
     >
-      {videoUrl && (
+      {videoUrl && !videoFallo && (
         <img
           src={videoUrl}
           data-tutorial="camara-video"
           alt="Cámara"
+          onError={() => setVideoFallo(true)}
           className="fixed inset-0 w-full h-full object-cover"
         />
       )}
@@ -265,10 +274,13 @@ export default function Camara({ setSidebarOpen }) {
         </div>
       )}
 
-      {!connected && (
+      {(!connected || videoFallo) && (
         <ServerStatusOverlay
           serverDown={serverDown}
-          engineError={engineError}
+          engineError={
+            engineError ||
+            (videoFallo && connected ? "Se cortó la imagen de la cámara." : "")
+          }
           className="absolute inset-0 flex items-center justify-center p-6 z-30"
           boxClassName="bg-black/70 rounded-xl p-6 max-w-md text-center space-y-3 text-white"
         />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { guardarJSON, leerJSON } from "../utils/almacen";
 
 const STORAGE_KEY = "signai_voice_settings";
 
@@ -26,15 +27,11 @@ export const hasElevenKey = (settings) =>
   Boolean((settings || loadVoiceSettings()).elevenApiKey);
 
 export function loadVoiceSettings() {
-  try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
-  } catch {
-    return defaults;
-  }
+  return { ...defaults, ...(leerJSON(STORAGE_KEY, null) || {}) };
 }
 
 export function saveVoiceSettings(s) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  guardarJSON(STORAGE_KEY, s);
 }
 
 export default function useSpeech() {

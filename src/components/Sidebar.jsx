@@ -21,9 +21,16 @@ const BASE =
  * resuelve CSS y este componente ya no sabe si es claro u oscuro.
  */
 export default function Sidebar({ isOpen, setIsOpen }) {
+  // Cerrada, la barra sigue en el DOM (para que la transición se vea) pero
+  // desplazada fuera de la pantalla. Sin esto, tabular desde la portada metía
+  // el foco en un menú invisible y no había forma de saber dónde estaba.
+  const oculto = isOpen ? undefined : -1;
+
   return (
     <aside
-      className={`fixed left-0 top-0 z-40 flex h-full w-60 flex-col justify-between
+      aria-hidden={!isOpen}
+      aria-label="Menú principal"
+      className={`fixed left-0 top-0 z-40 flex h-full w-60 max-w-[80vw] flex-col justify-between
                   border-r border-borde bg-superficie shadow-md
                   transition-transform duration-300
                   ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
@@ -34,6 +41,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           <button
             onClick={() => setIsOpen(false)}
             aria-label="Cerrar menú"
+            tabIndex={oculto}
             className="leading-none text-sutil transition hover:text-texto"
           >
             <X size={22} strokeWidth={2.2} />
@@ -47,6 +55,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
               to={to}
               end={end}
               data-tutorial={tutorial}
+              tabIndex={oculto}
               className={({ isActive }) =>
                 `${BASE} ${
                   isActive

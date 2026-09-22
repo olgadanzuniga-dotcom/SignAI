@@ -41,6 +41,14 @@ Avances/Modelo Transformer/analizar_abecedario.py
 Avances/Modelo Transformer/modelos/_viejos/*/signai_transformer.pth
 Avances/Modelo Transformer/modelos/_cmp_*/signai_transformer.pth
 
+# Del resto de modelos solo se versiona el unificado, que es el unico que la
+# app distribuye (ver signai-server.spec). Estos siguen en disco para
+# entrenar y comparar, pero pesan ~19 MB cada uno.
+Avances/Modelo Transformer/modelos/estatico/signai_transformer.pth
+Avances/Modelo Transformer/modelos/dinamico/signai_transformer.pth
+Avances/Modelo Transformer/modelos/_viejos/signai.pth
+Avances/Modelo Transformer/modelos/_viejos/signai_transformer.pth
+
 # El ONNX del modelo unificado vive en el repo movil
 # (signai-mobile/assets/models/unificado/signai.onnx)
 Avances/Modelo Transformer/modelos/unificado/signai.onnx

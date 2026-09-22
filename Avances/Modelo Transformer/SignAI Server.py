@@ -145,7 +145,11 @@ MOV_START_FRAMES = int(os.environ.get("SIGNAI_MOV_FRAMES", "3"))
 ESPERA = "ESPERA"
 
 # Modelo a cargar al arrancar (clave = nombre de la subcarpeta en modelos/).
-MODELO_DEFAULT = os.environ.get("SIGNAI_MODELO", "estatico").strip()
+# "unificado" es el unico que se empaqueta (ver signai-server.spec), asi que
+# tiene que ser tambien el default: con "estatico" la app instalada caia en la
+# rama de respaldo de start() para acertar por descarte, que funciona pero deja
+# el arranque dependiendo de que no haya otra carpeta antes en orden alfabetico.
+MODELO_DEFAULT = os.environ.get("SIGNAI_MODELO", "unificado").strip()
 
 # Cada modelo vive en su subcarpeta de modelos/ con estos 3 archivos; la clave
 # del modelo es el nombre de la carpeta (ej. "estatico", "dinamico").

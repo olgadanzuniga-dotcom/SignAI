@@ -129,13 +129,17 @@ export default function Quiz({ sidebarOpen, setSidebarOpen }) {
 
   return (
     <PageLayout
-      className="min-h-screen overflow-hidden"
-      contentClassName="justify-center items-center pt-14 pb-4 sm:pb-8 px-4 sm:px-6 lg:px-8 2xl:px-12 text-texto"
+      contentClassName="justify-center items-center text-texto"
+      contentStyle={{
+        paddingTop: "clamp(3.25rem, 7vh, 4.5rem)",
+        paddingBottom: "clamp(0.75rem, 3vh, 2rem)",
+        paddingInline: "clamp(0.75rem, 2.5vw, 3rem)",
+      }}
     >
 
       <PageHeader />
 
-      <div className="z-10 w-full max-w-5xl 2xl:max-w-[1400px] px-4 sm:px-6 2xl:px-10">
+      <div className="z-10 w-full max-w-5xl 2xl:max-w-[1400px]">
         
         {juegoTerminado ? (
           <GameOverCard
@@ -150,15 +154,25 @@ export default function Quiz({ sidebarOpen, setSidebarOpen }) {
             </p>
           </GameOverCard>
         ) : (
-          <div className="flex flex-col lg:flex-row gap-8 lg:gap-16 2xl:gap-24 items-center justify-center">
-            
+          // La seña y las opciones se ponen en fila desde `md` (768) y no
+          // desde `lg`: apiladas suman el alto de la imagen más el de los
+          // cuatro botones, que en una ventana baja se salía 265px. Y la caja
+          // de la seña se mide con `vh` además de con `vw`, para que sea el
+          // alto disponible —no el ancho— quien la limite cuando toca.
+          <div className="flex flex-col md:flex-row gap-[clamp(1rem,3vh,4rem)] md:gap-[clamp(1.5rem,4vw,6rem)] items-center justify-center">
+
             <motion.div
               key={`img-${preguntaActual}`}
               data-tutorial="quiz-imagen"
               initial={{ x: -50, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               transition={{ type: "spring", stiffness: 100 }}
-              className="bg-superficie rounded-[2rem] shadow-xl border border-borde p-6 sm:p-8 2xl:p-12 w-full max-w-sm 2xl:max-w-md aspect-square flex items-center justify-center"
+              style={{
+                width: "min(100%, clamp(8rem, 42vh, 28rem))",
+                aspectRatio: "1",
+                padding: "clamp(0.75rem, 2vw, 3rem)",
+              }}
+              className="bg-superficie rounded-[2rem] shadow-xl border border-borde shrink-0 flex items-center justify-center"
             >
               {preguntasJuego[preguntaActual]?.img ? (
                 <img 
@@ -171,7 +185,11 @@ export default function Quiz({ sidebarOpen, setSidebarOpen }) {
               )}
             </motion.div>
 
-            <div data-tutorial="quiz-opciones" className="w-full max-w-md 2xl:max-w-lg flex flex-col gap-3 sm:gap-4 2xl:gap-5">
+            <div
+              data-tutorial="quiz-opciones"
+              className="w-full max-w-md 2xl:max-w-lg flex flex-col"
+              style={{ gap: "clamp(0.5rem, 1.6vh, 1.25rem)" }}
+            >
 
               <div className="flex flex-col items-center text-center mb-2">
                 <span className="text-sm md:text-base 2xl:text-lg font-bold uppercase tracking-[0.2em] text-acento">
@@ -207,7 +225,11 @@ export default function Quiz({ sidebarOpen, setSidebarOpen }) {
                     whileTap={{ scale: 0.98 }}
                     onClick={() => manejarClick(opcion)}
                     disabled={bloqueado}
-                    className={`w-full py-3 sm:py-3.5 2xl:py-4 px-5 sm:px-6 2xl:px-8 rounded-2xl border-2 font-semibold text-base md:text-lg 2xl:text-xl text-center shadow-sm transition-all duration-300 ease-in-out ${bgClass}`}
+                    style={{
+                      paddingBlock: "clamp(0.5rem, 1.6vh, 1rem)",
+                      paddingInline: "clamp(0.75rem, 1.6vw, 2rem)",
+                    }}
+                    className={`w-full rounded-2xl border-2 font-semibold text-base md:text-lg 2xl:text-xl text-center shadow-sm transition-all duration-300 ease-in-out ${bgClass}`}
                   >
                     {letras[index]}) {opcion}
                   </motion.button>

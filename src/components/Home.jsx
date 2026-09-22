@@ -109,11 +109,15 @@ export default function Home({ sidebarOpen, setSidebarOpen, onTutorialChange }) 
   };
 
   return (
-    <PageLayout className="min-h-[calc(100vh-6rem)] overflow-hidden">
-      <ResponsiveContainer size="xl" className="relative py-[clamp(1.25rem,4vh,5rem)]">
-        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 2xl:gap-20 items-center mb-[clamp(1.5rem,5.5vh,6rem)]">
+    // Sin alto mínimo ni `overflow-hidden`: forzaba la portada a medir siempre
+    // 100vh menos 6rem — daba igual la ventana — y lo que no cabía quedaba
+    // recortado en vez de poder desplazarse. Ahora ocupa lo que necesita y el
+    // <main> se encarga del resto.
+    <PageLayout>
+      <ResponsiveContainer size="xl" className="relative py-[clamp(0.25rem,1.6vh,5rem)]">
+        <div className="grid md:grid-cols-2 gap-[clamp(0.75rem,3vh,3rem)] md:gap-[clamp(1.5rem,3vw,5rem)] items-center mb-[clamp(0.6rem,3.4vh,6rem)]">
           <motion.div
-            className="relative order-2 lg:order-1"
+            className="relative order-2 md:order-1 min-w-0"
             initial="hidden"
             animate="visible"
             variants={fadeUp}
@@ -124,10 +128,16 @@ export default function Home({ sidebarOpen, setSidebarOpen, onTutorialChange }) 
               transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
               className="relative"
             >
+              {/* El alto de la foto manda en el de toda la portada. Iba
+                  clavado a 420px, así que en una ventana de 640 se comía dos
+                  tercios de la pantalla y empujaba fuera la tarjeta de
+                  Recomendaciones. En `vh` crece en un monitor grande y se
+                  aparta en uno pequeño. */}
               <img
                 src={manos}
                 alt="Manos LSM"
-                className="w-full h-auto max-h-[420px] 2xl:max-h-[560px] object-cover rounded-3xl shadow-2xl border border-borde"
+                style={{ maxHeight: "clamp(9rem, 36vh, 35rem)" }}
+                className="w-full h-auto object-cover rounded-3xl shadow-2xl border border-borde"
               />
               <motion.div
                 initial={{ opacity: 0, scale: 0.8 }}
@@ -146,13 +156,13 @@ export default function Home({ sidebarOpen, setSidebarOpen, onTutorialChange }) 
             </motion.div>
           </motion.div>
 
-          <div className="order-1 lg:order-2 text-center lg:text-left">
+          <div className="order-1 md:order-2 min-w-0 text-center md:text-left">
             <motion.div
               initial="hidden"
               animate="visible"
               variants={fadeUp}
               custom={0}
-              className="inline-flex items-center gap-2 px-3 py-1 mb-[clamp(0.5rem,1.8vh,1rem)] rounded-full bg-acento-suave border border-acento/25"
+              className="inline-flex items-center gap-2 px-3 py-1 mb-[clamp(0.3rem,1.4vh,1rem)] rounded-full bg-acento-suave border border-acento/25"
             >
               <Zap className="w-3.5 h-3.5 text-acento" />
               <span className="text-xs font-semibold text-acento">
@@ -165,7 +175,7 @@ export default function Home({ sidebarOpen, setSidebarOpen, onTutorialChange }) 
               animate="visible"
               variants={fadeUp}
               custom={1}
-              className="text-balance font-extrabold tracking-tight text-texto mb-[clamp(0.5rem,2vh,1.5rem)]"
+              className="text-balance font-extrabold tracking-tight text-texto mb-[clamp(0.35rem,1.6vh,1.5rem)]"
               style={{ fontSize: "clamp(2.25rem, 4.4vw, 4.5rem)", lineHeight: 1.08 }}
             >
               Traduce señas{" "}
@@ -184,7 +194,7 @@ export default function Home({ sidebarOpen, setSidebarOpen, onTutorialChange }) 
               animate="visible"
               variants={fadeUp}
               custom={2}
-              className="text-pretty text-base sm:text-lg 2xl:text-xl text-sutil mb-[clamp(1rem,3.5vh,2.5rem)] max-w-xl 2xl:max-w-2xl mx-auto lg:mx-0 leading-relaxed"
+              className="text-pretty text-base sm:text-lg 2xl:text-xl text-sutil mb-[clamp(0.6rem,2.6vh,2.5rem)] max-w-xl 2xl:max-w-2xl mx-auto md:mx-0 leading-relaxed"
             >
               Conecta con la comunidad sorda a través de la inteligencia artificial.
               Convierte la Lengua de Señas Mexicana en voz, al instante.
@@ -195,7 +205,7 @@ export default function Home({ sidebarOpen, setSidebarOpen, onTutorialChange }) 
               animate="visible"
               variants={fadeUp}
               custom={3}
-              className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start"
+              className="flex flex-col sm:flex-row flex-wrap gap-3 justify-center md:justify-start"
             >
               <button
                 data-tutorial="iniciar"
@@ -217,18 +227,18 @@ export default function Home({ sidebarOpen, setSidebarOpen, onTutorialChange }) 
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 2xl:gap-20 items-start">
+        <div className="grid md:grid-cols-2 gap-[clamp(0.75rem,3vh,3rem)] md:gap-[clamp(1.5rem,3vw,5rem)] items-start">
           <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, amount: 0.3 }}
             variants={fadeUp}
-            className="lg:pl-4 text-center lg:text-left"
+            className="md:pl-4 min-w-0 text-center md:text-left"
           >
-            <h2 className="text-sm 2xl:text-base font-bold tracking-wider uppercase text-sutil mb-[clamp(0.75rem,2.5vh,2rem)]">
+            <h2 className="text-sm 2xl:text-base font-bold tracking-wider uppercase text-sutil mb-[clamp(0.5rem,2vh,2rem)]">
               Cómo funciona
             </h2>
-            <div className="flex flex-col gap-[clamp(0.75rem,2.4vh,1.75rem)]">
+            <div className="flex flex-col gap-[clamp(0.6rem,2vh,1.75rem)]">
               {STEPS.map((step, i) => {
                 const Icon = step.icon;
                 return (
@@ -238,8 +248,11 @@ export default function Home({ sidebarOpen, setSidebarOpen, onTutorialChange }) 
                     custom={i}
                     className="flex items-center gap-4 2xl:gap-6"
                   >
-                    <div className="relative w-14 h-14 2xl:w-20 2xl:h-20 flex-shrink-0 flex items-center justify-center rounded-2xl bg-superficie border border-borde shadow-md">
-                      <Icon className="w-6 h-6 2xl:w-8 2xl:h-8 text-acento" />
+                    <div
+                      style={{ width: "clamp(2.5rem, 5.5vh, 5rem)", height: "clamp(2.5rem, 5.5vh, 5rem)" }}
+                      className="relative flex-shrink-0 flex items-center justify-center rounded-2xl bg-superficie border border-borde shadow-md"
+                    >
+                      <Icon className="w-[45%] h-[45%] text-acento" />
                       <span className="absolute -top-2 -right-2 w-6 h-6 2xl:w-8 2xl:h-8 rounded-full bg-acento text-acento-texto text-xs 2xl:text-sm font-bold flex items-center justify-center shadow">
                         {i + 1}
                       </span>
@@ -258,9 +271,9 @@ export default function Home({ sidebarOpen, setSidebarOpen, onTutorialChange }) 
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.2 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
-            className="relative bg-superficie rounded-2xl 2xl:rounded-3xl border border-borde shadow-lg p-[clamp(1rem,3vh,2.25rem)] overflow-hidden"
+            className="relative min-w-0 bg-superficie rounded-2xl 2xl:rounded-3xl border border-borde shadow-lg p-[clamp(0.75rem,2.4vh,2.25rem)] overflow-hidden"
           >
-            <div className="relative flex items-center gap-2 2xl:gap-3 mb-[clamp(0.75rem,2.4vh,1.75rem)]">
+            <div className="relative flex items-center gap-2 2xl:gap-3 mb-[clamp(0.5rem,2vh,1.75rem)]">
               <div className="w-8 h-8 2xl:w-11 2xl:h-11 rounded-lg bg-acento-suave flex items-center justify-center">
                 <Lightbulb className="w-4 h-4 2xl:w-5 2xl:h-5 text-acento" />
               </div>
@@ -269,16 +282,16 @@ export default function Home({ sidebarOpen, setSidebarOpen, onTutorialChange }) 
               </h2>
             </div>
 
-            <div className="relative flex flex-col gap-[clamp(0.6rem,2vh,1.5rem)]">
+            <div className="relative flex flex-col gap-[clamp(0.4rem,1.4vh,1.5rem)]">
               {TIPS.map((tip, i) => {
                 const Icon = tip.icon;
                 return (
                   <div key={tip.title} className="flex items-start gap-3 2xl:gap-4">
                     <div
-                      className="w-9 h-9 2xl:w-12 2xl:h-12 flex-shrink-0 rounded-lg bg-[rgb(var(--tono))]/[0.14] flex items-center justify-center"
+                      className="w-[clamp(1.75rem,3.4vh,3rem)] h-[clamp(1.75rem,3.4vh,3rem)] flex-shrink-0 rounded-lg bg-[rgb(var(--tono))]/[0.14] flex items-center justify-center"
                       style={{ "--tono": `var(--cat-${tip.tono})` }}
                     >
-                      <Icon className="w-4 h-4 2xl:w-6 2xl:h-6 text-[rgb(var(--tono))]" />
+                      <Icon className="w-1/2 h-1/2 text-[rgb(var(--tono))]" />
                     </div>
                     <div>
                       <h3 className="text-sm 2xl:text-base font-semibold text-texto mb-0.5 2xl:mb-1">

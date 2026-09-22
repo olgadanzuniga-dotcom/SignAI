@@ -26,13 +26,16 @@ import PageHeader from "./PageHeader";
  *   sin romperse en el mínimo de 1024×640.
  *
  * @param {{ columnas?: string }} props clases de columnas de Tailwind para la
- *   retícula. Por defecto tres columnas desde `lg` (1024): con dos, las nueve
- *   categorías necesitan cinco filas y no caben en el mínimo de 1024x640.
+ *   retícula. Por defecto tres columnas desde `md` (768): con dos, las nueve
+ *   categorías necesitan cinco filas, y cinco filas no caben en una ventana
+ *   baja. Entraba desde `lg` (1024), pero al bajar el mínimo de la ventana a
+ *   800x600 esas cinco filas volvían a desbordar; a 800px de ancho tres
+ *   columnas dan tarjetas de ~240px, que siguen siendo holgadas.
  */
 export default function PantallaCuadricula({
   titulo,
   subtitulo,
-  columnas = "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+  columnas = "grid-cols-1 sm:grid-cols-2 md:grid-cols-3",
   mostrarVolver = true,
   cuadriculaKey,
   children,
@@ -51,8 +54,10 @@ export default function PantallaCuadricula({
         className="flex min-h-0 flex-1 flex-col"
         style={{
           paddingInline: "clamp(1rem, 3.5vw, 5rem)",
-          paddingTop: "clamp(4rem, 8vh, 7rem)",
-          paddingBottom: "clamp(1rem, 3.5vh, 3rem)",
+          // El relleno superior deja sitio al botón «Volver», que va absoluto
+          // arriba a la izquierda: por debajo de 3.25rem se le echaría encima.
+          paddingTop: "clamp(3.25rem, 8vh, 7rem)",
+          paddingBottom: "clamp(0.75rem, 3.5vh, 3rem)",
         }}
       >
         {(titulo || subtitulo) && (

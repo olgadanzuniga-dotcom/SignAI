@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
+import { guardar, leer } from "../../utils/almacen";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -47,7 +48,7 @@ export default function Tutorial({
   };
 
   useEffect(() => {
-    if (storageKey && localStorage.getItem(storageKey)) return;
+    if (storageKey && leer(storageKey)) return;
     setActive(true);
     onStart?.();
     const tAgua = setTimeout(() => setAnimarAgua(true), 100);
@@ -80,7 +81,7 @@ export default function Tutorial({
     await wait(320);
     setAnimarAgua(false);
     await wait(1000);
-    if (storageKey) localStorage.setItem(storageKey, "true");
+    if (storageKey) guardar(storageKey, "true");
     setActive(false);
     onFinish?.();
   };

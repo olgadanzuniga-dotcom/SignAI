@@ -36,6 +36,17 @@ import imgPlaceholder from "../../../assets/elefante_lsm.svg";
 
 const obtenerImagenLetra = () => imgPlaceholder;
 
+// Las fichas de arriba y los huecos de abajo tienen que medir EXACTAMENTE lo
+// mismo (una ficha se arrastra de un sitio al otro), así que la medida vive en
+// un solo lugar. Iba en escalones fijos por punto de ruptura — 112px de alto
+// pasara lo que pasara — y en una ventana baja las dos bandejas juntas se
+// salían de la pantalla. Con `vw` para el ancho y `vh` para el alto, el juego
+// entra igual en 800x600 que en un monitor de 27 pulgadas.
+const FICHA = {
+  width: "clamp(3.75rem, 8.5vw, 11rem)",
+  height: "clamp(4.5rem, 13vh, 13rem)",
+};
+
 export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
   const navigate = useNavigate();
   const timeoutRef = useRef(null);
@@ -130,14 +141,25 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
 
   const devolverADisponibles = (slotIndex) => {
     if (verificando) return;
+    // La ficha se lee ANTES, no dentro del actualizador. Meter un
+    // `setLetrasDisponibles` dentro de `setLetrasColocadas` convierte el
+    // actualizador en impuro, y React se reserva el derecho de ejecutarlo dos
+    // veces (lo hace, de hecho, en StrictMode y al descartar un render
+    // concurrente): la ficha volvía por duplicado a la bandeja, con la misma
+    // `key` y todo.
+    const letra = letrasColocadas[slotIndex];
+    if (!letra) return;
+
     setLetrasColocadas((prev) => {
-      const letra = prev[slotIndex];
-      if (!letra) return prev;
+      if (!prev[slotIndex]) return prev;
       const nuevas = [...prev];
       nuevas[slotIndex] = null;
-      setLetrasDisponibles((d) => [...d, letra]);
       return nuevas;
     });
+    // Idempotente a propósito: si el actualizador se repite, no duplica.
+    setLetrasDisponibles((d) =>
+      d.some((l) => l.id === letra.id) ? d : [...d, letra]
+    );
   };
 
   // Tap: colocar en el primer slot vacío
@@ -191,12 +213,16 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
 
   return (
     <PageLayout
-      className="h-full overflow-hidden"
-      contentClassName="items-center pt-14 pb-4 px-4 sm:px-6 lg:px-8 text-texto"
+      contentClassName="items-center text-texto"
+      contentStyle={{
+        paddingTop: "clamp(3.25rem, 7vh, 4.5rem)",
+        paddingBottom: "clamp(0.5rem, 2vh, 1.5rem)",
+        paddingInline: "clamp(0.75rem, 2.5vw, 3rem)",
+      }}
     >
       <PageHeader />
 
-      <div className="z-10 w-full max-w-5xl 2xl:max-w-[1400px] px-4 sm:px-6 2xl:px-10 flex flex-col items-stretch">
+      <div className="z-10 w-full max-w-5xl 2xl:max-w-[1400px] flex flex-col items-stretch">
         <ProgressHeader
           dataTutorial="deletreo-progreso"
           descripcion="Arrastra las señas a los espacios para formar la palabra correcta. Puedes moverlas entre huecos o regresarlas arriba si te equivocas."
@@ -240,7 +266,13 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
             <div
               ref={disponiblesRef}
               data-tutorial="deletreo-disponibles"
-              className="min-h-[180px] 2xl:min-h-[220px] w-full flex flex-wrap justify-center items-center gap-3 sm:gap-4 2xl:gap-6 mb-4 xl:mb-6 2xl:mb-8 rounded-3xl bg-superficie border border-borde shadow-xl p-5 sm:p-6 xl:p-8 2xl:p-10"
+              style={{
+                minHeight: "clamp(6rem, 18vh, 14rem)",
+                gap: "clamp(0.5rem, 1.2vw, 1.5rem)",
+                padding: "clamp(0.75rem, 1.6vw, 2.5rem)",
+                marginBottom: "clamp(0.6rem, 2vh, 2rem)",
+              }}
+              className="w-full flex flex-wrap justify-center items-center rounded-3xl bg-superficie border border-borde shadow-xl"
             >
               <AnimatePresence>
                 {letrasDisponibles.map((letra) => (
@@ -265,7 +297,8 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
                        seña es línea oscura sobre transparente y sobre fondo
                        oscuro no se ve. Misma excepción que las cartas del
                        memorama. */
-                    className="cursor-grab active:cursor-grabbing bg-white rounded-2xl shadow-sm border border-borde p-3 w-24 sm:w-28 lg:w-32 xl:w-36 2xl:w-44 h-28 sm:h-32 lg:h-36 xl:h-40 2xl:h-52 flex flex-col items-center justify-center hover:shadow-md hover:border-acento touch-none select-none"
+                    style={FICHA}
+                    className="cursor-grab active:cursor-grabbing bg-white rounded-2xl shadow-sm border border-borde p-2 sm:p-3 flex flex-col items-center justify-center hover:shadow-md hover:border-acento touch-none select-none"
                   >
                     <img
                       src={letra.img}
@@ -279,8 +312,18 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
             </div>
 
             <div className="w-full relative mt-2 flex-1 flex flex-col items-center justify-start">
-              <div data-tutorial="deletreo-slots" className="relative w-full bg-superficie rounded-[2rem] shadow-xl border border-borde min-h-[200px] xl:min-h-[220px] 2xl:min-h-[280px] p-5 sm:p-6 xl:p-8 2xl:p-12 flex flex-col items-center justify-center">
-                <div className="flex flex-wrap justify-center gap-4 z-10 relative">
+              <div
+                data-tutorial="deletreo-slots"
+                style={{
+                  minHeight: "clamp(6.5rem, 20vh, 17.5rem)",
+                  padding: "clamp(0.75rem, 1.6vw, 3rem)",
+                }}
+                className="relative w-full bg-superficie rounded-[2rem] shadow-xl border border-borde flex flex-col items-center justify-center"
+              >
+                <div
+                  className="flex flex-wrap justify-center z-10 relative"
+                  style={{ gap: "clamp(0.5rem, 1.2vw, 1.5rem)" }}
+                >
                   {Array.from({ length: palabraObjetivo.length }).map((_, index) => {
                     const letra = letrasColocadas[index];
 
@@ -299,7 +342,8 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
                       <div
                         key={`slot-${index}`}
                         ref={(el) => (slotRefs.current[index] = el)}
-                        className="relative w-24 sm:w-28 lg:w-32 xl:w-36 2xl:w-44 h-28 sm:h-32 lg:h-36 xl:h-40 2xl:h-52 rounded-2xl group"
+                        style={FICHA}
+                        className="relative rounded-2xl group"
                       >
                         <div className="absolute inset-0 rounded-2xl border-2 border-dashed border-borde bg-superficie-2/60 transition-colors group-hover:border-acento group-hover:bg-acento-suave/50" />
 
@@ -322,7 +366,7 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
                               whileHover={{ scale: verificando ? 1 : 1.05 }}
                               whileTap={{ scale: verificando ? 1 : 0.95 }}
                               whileDrag={{ scale: 1.1, zIndex: 50 }}
-                              className={`absolute inset-0 cursor-grab active:cursor-grabbing rounded-2xl shadow-md border p-3 flex flex-col items-center justify-center z-10 ${bgClass}`}
+                              className={`absolute inset-0 cursor-grab active:cursor-grabbing rounded-2xl shadow-md border p-2 sm:p-3 flex flex-col items-center justify-center z-10 ${bgClass}`}
                             >
                               <img
                                 src={letra.img}
@@ -357,7 +401,8 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
                     <motion.div
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="mt-10 text-center bg-acento-suave px-8 py-3 rounded-2xl border border-acento/25"
+                      style={{ marginTop: "clamp(1.25rem, 4vh, 2.5rem)" }}
+                      className="text-center bg-acento-suave px-8 py-3 rounded-2xl border border-acento/25"
                     >
                       <p className="text-acento font-bold uppercase tracking-widest text-xs mb-1">
                         La palabra es

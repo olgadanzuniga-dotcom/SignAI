@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, screen, session, shell } = require("electron");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
@@ -247,22 +247,77 @@ function protocoloDe(url) {
   }
 }
 
+// Tamano de arranque. 1280x720 es lo deseable, pero pedirlo a secas en un
+// portatil de 1366x768 dejaba la ventana practicamente pegada a los bordes, y
+// en una pantalla mas pequenia (o con escalado de Windows al 150%, que reduce
+// el area util) la barra de tareas se comia parte de la app. Se recorta al
+// area de trabajo real del monitor donde esta el cursor, dejando un margen.
+const MIN_ANCHO = 800;
+const MIN_ALTO = 600;
+
+function medidasDeVentana() {
+  try {
+    const punto = screen.getCursorScreenPoint();
+    const { workArea } = screen.getDisplayNearestPoint(punto);
+    const ancho = Math.max(MIN_ANCHO, Math.min(1280, workArea.width - 40));
+    const alto = Math.max(MIN_ALTO, Math.min(720, workArea.height - 40));
+    return {
+      width: ancho,
+      height: alto,
+      x: Math.round(workArea.x + (workArea.width - ancho) / 2),
+      y: Math.round(workArea.y + (workArea.height - alto) / 2),
+    };
+  } catch (err) {
+    // `screen` solo esta disponible con la app lista; si algo falla, mejor
+    // abrir con el tamanio de siempre que no abrir.
+    console.error("[ventana] no se pudo leer el area de trabajo:", err);
+    return { width: 1280, height: 720 };
+  }
+}
+
 const createWindow = () => {
   // SIGNAI_USAR_DIST=1 carga la compilacion en vez del servidor de Vite. Es la
   // unica forma de probar lo que ve el usuario instalado (CSP incluida) sin
   // pasar por `npm run dist`, que ademas tiene que empaquetar todo Python.
   const usarDist = app.isPackaged || process.env.SIGNAI_USAR_DIST === "1";
   const win = new BrowserWindow({
-    width: 1280,
-    height: 720,
-    // Por debajo de esto la interfaz se rompe; en equipos con pantallas
-    // pequenias la ventana por defecto no siempre cabe.
-    minWidth: 1024,
-    minHeight: 640,
+    ...medidasDeVentana(),
+    // La interfaz esta verificada hasta aqui (ver
+    // pruebas/ui/verificar-tamanos.cjs). Estaba en 1024x640, que dejaba fuera
+    // a quien trabaja con la ventana a media pantalla.
+    minWidth: MIN_ANCHO,
+    minHeight: MIN_ALTO,
     show: false, // se muestra ya pintada: sin destello blanco al abrir
     icon: getWindowsIconPath(),
   });
   mainWindow = win;
+
+  // El renderer se puede morir solo: se queda sin memoria, el driver de la
+  // GPU revienta con el modelo 3D, o Windows mata el proceso. Sin esto la
+  // ventana se queda en blanco para siempre y no hay ni menu con que
+  // recargar (al empaquetar se quita). Recargar es lo unico que hace falta:
+  // el estado que importa vive en localStorage.
+  win.webContents.on("render-process-gone", (_evento, detalles) => {
+    console.error("[renderer] proceso caido:", detalles.reason);
+    if (cerrando || win.isDestroyed()) return;
+    if (detalles.reason === "clean-exit" || detalles.reason === "killed") return;
+    win.reload();
+  });
+
+  win.on("unresponsive", async () => {
+    if (cerrando || win.isDestroyed()) return;
+    const { response } = await dialog.showMessageBox(win, {
+      type: "warning",
+      title: "SignAI",
+      message: "SignAI dejo de responder",
+      detail: "Puedes esperar a que reaccione o recargar la pantalla. Tu " +
+        "progreso guardado no se pierde al recargar.",
+      buttons: ["Esperar", "Recargar"],
+      defaultId: 1,
+      noLink: true,
+    }).catch(() => ({ response: 0 }));
+    if (response === 1 && !win.isDestroyed()) win.reload();
+  });
 
   // Sin esto, un window.open o un <a target="_blank"> abria una BrowserWindow
   // nueva con los webPreferences por defecto, y un enlace normal sacaba a la
@@ -375,3 +430,28 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", stopInferenceServer);
+
+// Una excepcion sin atrapar en el proceso principal mata la app **y deja vivo
+// al signai-server.exe**, que se queda con el puerto 8765 y con la camara: el
+// siguiente arranque falla y el usuario no entiende por que. Aqui se registra,
+// se apaga el motor y se cierra en orden.
+process.on("uncaughtException", (err) => {
+  console.error("[principal] excepcion sin atrapar:", err);
+  try {
+    stopInferenceServer();
+  } catch {}
+  dialog.showErrorBox(
+    "SignAI",
+    "SignAI tuvo un error interno y debe cerrarse.\n\n" +
+      "Vuelve a abrirlo; si se repite, reinstala la aplicacion.\n\n" +
+      String(err?.message || err)
+  );
+  app.exit(1);
+});
+
+process.on("unhandledRejection", (motivo) => {
+  // No se cierra la app: una promesa rechazada suele ser un sondeo de red o
+  // un dialogo cancelado, no un estado corrupto. Pero sin registrarlo no hay
+  // manera de diagnosticar nada desde la consola.
+  console.error("[principal] promesa rechazada sin atrapar:", motivo);
+});
