@@ -1,5 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { useIdioma } from "../../i18n";
 
 /**
  * Tarjeta de una categoría, en las cuadrículas de Aprender, Aprendizaje y
@@ -51,6 +52,7 @@ export default function CategoriaCard({
   tutorialKey,
   variante = "fila",
 }) {
+  const { t } = useIdioma();
   const esTarjeta = variante === "tarjeta";
 
   return (
@@ -74,18 +76,27 @@ export default function CategoriaCard({
         borderRadius: "clamp(0.75rem, 1vw, 1.4rem)",
         borderLeftWidth: "clamp(4px, 0.35vw, 9px)",
       }}
-      className={`group flex h-full w-full border border-borde
+      className={`group relative flex h-full w-full overflow-hidden border border-borde
                   border-l-[rgb(var(--tono))] bg-superficie
-                  transition-colors duration-200 hover:bg-superficie-2 ${
+                  shadow-sm transition-all duration-200
+                  hover:bg-superficie-2 hover:shadow-md ${
                     esTarjeta
                       ? "flex-col items-center justify-center text-center"
                       : "items-center text-left"
                   }`}
     >
+      {/* Lavado muy sutil del tono sobre toda la tarjeta: la liga con la
+          banda del canto sin cubrir suficiente superficie como para cansar
+          entre las nueve categorías (ver nota de arriba). */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[rgb(var(--tono))]/[0.05] dark:bg-[rgb(var(--tono))]/[0.08]"
+      />
+
       {/* La placa lleva el mismo tono a baja opacidad: liga el icono con la
           banda sin añadir otra mancha de color fuerte. */}
       <span
-        className="grid shrink-0 place-items-center bg-[rgb(var(--tono))]/[0.14]"
+        className="relative grid shrink-0 place-items-center bg-[rgb(var(--tono))]/[0.16] shadow-inner transition-transform duration-200 group-hover:scale-105"
         style={{
           height: esTarjeta ? "55%" : "50%",
           width: "auto",
@@ -100,7 +111,7 @@ export default function CategoriaCard({
         className={`min-w-0 font-semibold text-texto ${esTarjeta ? "" : "flex-1"}`}
         style={{ fontSize: "clamp(0.95rem, 1.35vw, 1.7rem)", lineHeight: 1.25 }}
       >
-        {titulo}
+        {t(titulo)}
       </span>
     </motion.button>
   );

@@ -6,6 +6,7 @@ import ScrollToTop from "./components/ScrollToTop";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import { ThemeProvider } from "./context/ThemeContext";
 import { leer } from "./utils/almacen";
+import "@fontsource-variable/fredoka/index.css";
 import "./index.css";
 
 // Todo lo que se escapa del render de React acaba aquí. En Electron no hay
@@ -30,6 +31,13 @@ if (theme === "dark") {
   document.documentElement.classList.add("dark");
 } else {
   document.documentElement.classList.remove("dark");
+}
+
+// Aplica el modo infantil guardado ANTES de que React renderice algo, igual
+// que el tema: sin esto la portada se veía un instante en modo normal y
+// saltaba al modo infantil apenas montaba <Home>.
+if (leer("lsm_kid_mode") === "true") {
+  document.documentElement.classList.add("kid-mode");
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(

@@ -52,3 +52,14 @@ Avances/Modelo Transformer/modelos/_viejos/signai_transformer.pth
 # El ONNX del modelo unificado vive en el repo movil
 # (signai-mobile/assets/models/unificado/signai.onnx)
 Avances/Modelo Transformer/modelos/unificado/signai.onnx
+
+# Entornos de Python locales (pesan cientos de MB)
+Avances/Modelo Transformer/venv/
+Avances/Modelo Transformer/venv310/
+
+# Respaldos y logs locales
+*.bak
+*.bak[0-9]
+*.log
+Avances/Modelo Transformer/_descartado/
+Avances/Modelo Transformer/dataset_lsm_rapido/

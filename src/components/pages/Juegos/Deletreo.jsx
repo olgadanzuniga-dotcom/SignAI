@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { palabrasDeletreo as listaPalabras } from "../../../data/palabras";
 import PageHeader from "../../common/PageHeader";
+import FondoJuego from "../../common/FondoJuego";
 import Tutorial from "../../common/Tutorial";
 import PageLayout from "../../common/PageLayout";
 import GameOverCard from "../../common/GameOverCard";
@@ -31,10 +32,13 @@ const DELETREO_TUTORIAL_STEPS = [
   },
 ];
 
-// Placeholder temporal: todas las letras usan la misma imagen hasta tener assets reales
-import imgPlaceholder from "../../../assets/elefante_lsm.svg";
+import { abecedarioLSM } from "../../../data/abecedarioLSM";
+import useAudioJuego from "../../../hooks/useAudioJuego";
+import { registrarRespuesta, usePartidaTerminada } from "../../../utils/progreso";
+import { tr } from "../../../i18n";
 
-const obtenerImagenLetra = () => imgPlaceholder;
+const imagenDeLetra = Object.fromEntries(abecedarioLSM.map((l) => [l.letra, l.img]));
+const obtenerImagenLetra = (letra) => imagenDeLetra[letra];
 
 // Las fichas de arriba y los huecos de abajo tienen que medir EXACTAMENTE lo
 // mismo (una ficha se arrastra de un sitio al otro), así que la medida vive en
@@ -60,8 +64,14 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
   const [verificando, setVerificando] = useState(false);
   const [juegoTerminado, setJuegoTerminado] = useState(false);
   const [puntaje, setPuntaje] = useState(0);
+  const audio = useAudioJuego();
+  usePartidaTerminada("deletreo", juegoTerminado, puntaje, listaPalabras.length);
 
   useCerrarSidebar(setSidebarOpen);
+
+  useEffect(() => {
+    if (juegoTerminado) audio.fin();
+  }, [juegoTerminado, audio.fin]);
 
   useEffect(() => {
     return () => {
@@ -99,8 +109,14 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
 
     setVerificando(true);
     const palabraFormada = letrasColocadas.map((l) => l.caracter).join("");
-    if (palabraFormada === palabraObjetivo) {
+    const palabraDicha = palabraObjetivo.charAt(0) + palabraObjetivo.slice(1).toLowerCase();
+    const correcto = palabraFormada === palabraObjetivo;
+    registrarRespuesta(palabraObjetivo, correcto);
+    if (correcto) {
       setPuntaje((prev) => prev + 1);
+      audio.acierto(palabraDicha);
+    } else {
+      audio.error(palabraDicha);
     }
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -220,7 +236,8 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
         paddingInline: "clamp(0.75rem, 2.5vw, 3rem)",
       }}
     >
-      <PageHeader />
+      <PageHeader title={tr("Deletreo")} />
+      <FondoJuego tono={9} tono2={1} />
 
       <div className="z-10 w-full max-w-5xl 2xl:max-w-[1400px] flex flex-col items-stretch">
         <ProgressHeader
@@ -232,16 +249,14 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
             {
               punto: "bg-acento",
               contenido: (
-                <>
-                  Nivel {Math.min(nivelActual + 1, listaPalabras.length)} / {listaPalabras.length}
+                <>{tr("Nivel")}{" "}{Math.min(nivelActual + 1, listaPalabras.length)} / {listaPalabras.length}
                 </>
               ),
             },
             {
               punto: "bg-exito",
               contenido: (
-                <>
-                  Aciertos: <span className="text-exito">{puntaje}</span>
+                <>{tr("Aciertos:")}{" "}<span className="text-exito">{puntaje}</span>
                 </>
               ),
             },
@@ -256,9 +271,7 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
               className="p-10 shadow-xl border-borde"
               onSalir={() => navigate(-1)}
             >
-              <p className="text-xl sm:text-2xl text-sutil mb-6">
-                Acertaste <strong className="text-exito text-3xl">{puntaje}</strong> de {listaPalabras.length} palabras.
-              </p>
+              <p className="text-xl sm:text-2xl text-sutil mb-6">{tr("Acertaste")}{" "}<strong className="text-exito text-3xl">{puntaje}</strong>{" "}{tr("de")}{" "}{listaPalabras.length}{" "}{tr("palabras.")}</p>
             </GameOverCard>
           </div>
         ) : (
@@ -302,7 +315,7 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
                   >
                     <img
                       src={letra.img}
-                      alt="Seña"
+                      alt={tr("Seña")}
                       draggable={false}
                       className="w-full h-full object-contain drop-shadow-sm pointer-events-none"
                     />
@@ -370,7 +383,7 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
                             >
                               <img
                                 src={letra.img}
-                                alt="Seña"
+                                alt={tr("Seña")}
                                 draggable={false}
                                 className="w-full h-full object-contain pointer-events-none"
                               />
@@ -404,9 +417,7 @@ export default function Deletreo({ sidebarOpen, setSidebarOpen }) {
                       style={{ marginTop: "clamp(1.25rem, 4vh, 2.5rem)" }}
                       className="text-center bg-acento-suave px-8 py-3 rounded-2xl border border-acento/25"
                     >
-                      <p className="text-acento font-bold uppercase tracking-widest text-xs mb-1">
-                        La palabra es
-                      </p>
+                      <p className="text-acento font-bold uppercase tracking-widest text-xs mb-1">{tr("La palabra es")}</p>
                       <p className="text-3xl sm:text-4xl font-black text-acento tracking-widest">
                         {palabraObjetivo}
                       </p>

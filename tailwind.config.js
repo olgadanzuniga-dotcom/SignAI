@@ -35,6 +35,16 @@ export default {
         etiqueta: ["0.75rem", { lineHeight: "1.4", letterSpacing: "0.02em", fontWeight: "600" }],
       },
       borderRadius: { tarjeta: "1rem", chip: "0.75rem" },
+      fontFamily: {
+        // Modo infantil: tipografía redondeada y juguetona. La CSP de
+        // producción no permite cargar fuentes externas (font-src 'self'),
+        // así que usamos las tipografías redondeadas que ya trae Windows en
+        // vez de depender de una red que la app no necesita para nada más.
+        comic: ['"Comic Sans MS"', '"Segoe Print"', "system-ui", "sans-serif"],
+        // Traductor: letra redonda y gruesa, empaquetada con la app
+        // (@fontsource-variable/fredoka) para que funcione sin internet.
+        llamativa: ['"Fredoka Variable"', '"Segoe UI"', "system-ui", "sans-serif"],
+      },
     },
   },
   plugins: [],

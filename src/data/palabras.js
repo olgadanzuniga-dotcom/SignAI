@@ -4,7 +4,11 @@ export const palabrasDeletreo = ["AGUA", "MESA", "GATO", "CARRO"];
 // estáticas = letras sin movimiento; dinámicas = palabras y letras con
 // movimiento. El modelo "unificado" reconoce ambas.
 export const senasEstaticas = new Set("ABCDEFGHILMNOPRSTUVWY".split(""));
-export const senasDinamicas = new Set(["AGUA", "HOLA", "PERRO", "J", "Q", "RR", "X", "Z", "Ñ"]);
+export const senasDinamicas = new Set([
+  "AGUA", "HOLA", "PERRO", "J", "Q", "RR", "X", "Z", "Ñ",
+  // Agregadas sin reentrenar (senas_nuevas.py en el servidor).
+  "AMARILLO", "AZUL", "ROJO", "BUENOS", "DÍAS",
+]);
 
 // Alfabeto LSM completo. Se define el alfabeto (cerrado) y no la lista de
 // palabras (abierta): así, al ampliar el vocabulario del modelo, las clases

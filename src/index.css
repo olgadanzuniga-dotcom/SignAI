@@ -142,6 +142,30 @@ main {
   background-color: rgb(var(--acento) / 0.55);
 }
 
+/* Modo infantil: clases reutilizadas por Infantil.jsx, RepasoABC y
+   RepasoLetras (ver src/hooks/useKidMode.js). Usan los mismos tokens que el
+   resto de la app para que el tema claro/oscuro las siga resolviendo solas. */
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full
+           bg-acento text-acento-texto font-semibold shadow-md
+           transition-all duration-300 hover:bg-acento-fuerte hover:shadow-lg
+           active:scale-95;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full
+           bg-superficie-2 text-texto font-semibold border border-borde shadow-sm
+           transition-all duration-300 hover:bg-superficie hover:shadow-md
+           active:scale-95;
+  }
+  .glass-panel {
+    @apply bg-superficie/80 backdrop-blur-md border border-borde;
+  }
+  .heading-gradient {
+    @apply bg-gradient-to-r from-pink-500 via-orange-400 to-emerald-500 bg-clip-text text-transparent;
+  }
+}
+
 .perspective-1000 { perspective: 1000px; }
 .preserve-3d { transform-style: preserve-3d; }
 .backface-hidden { backface-visibility: hidden; }
@@ -156,4 +180,9 @@ main {
 .fade-exit,
 .fade-exit-active {
   display: none;
+}
+/* Traductor: la letra reconocida entra con un pequeño salto. */
+@keyframes aparecer {
+  from { opacity: 0; transform: scale(0.6) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }

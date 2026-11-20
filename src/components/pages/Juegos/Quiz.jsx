@@ -4,10 +4,13 @@ import { Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { respuestasIncorrectasQuiz as respuestasIncorrectas } from "../../../data/palabras";
 import PageHeader from "../../common/PageHeader";
+import FondoJuego from "../../common/FondoJuego";
 import Tutorial from "../../common/Tutorial";
 import PageLayout from "../../common/PageLayout";
 import GameOverCard from "../../common/GameOverCard";
 import useCerrarSidebar from "../../../hooks/useCerrarSidebar";
+import useAudioJuego from "../../../hooks/useAudioJuego";
+import { registrarRespuesta, usePartidaTerminada } from "../../../utils/progreso";
 import { barajar } from "../../../utils/aleatorio";
 
 const QUIZ_TUTORIAL_STEPS = [
@@ -25,39 +28,8 @@ const QUIZ_TUTORIAL_STEPS = [
   },
 ];
 
-import perroImg from "../../../assets/perro.svg";
-import holaImg from "../../../assets/hola.svg";
-import tacosImg from "../../../assets/tacos.svg";
-import amarilloImg from "../../../assets/amarillo.svg";
-import carroImg from "../../../assets/carro_lsm.svg";
-import elefanteImg from "../../../assets/elefante_lsm.svg";
-import tiendaImg from "../../../assets/tienda.svg";
-import adiosImg from "../../../assets/adios.svg";
-import refrescoImg from "../../../assets/refresco.svg";
-import gatoImg from "../../../assets/gato_lsm.svg";
-import autobusImg from "../../../assets/autobus.svg";
-import montanaImg from "../../../assets/montaña.svg";
-import libroImg from "../../../assets/libro.svg";
-import ventanaImg from "../../../assets/ventana.svg";
-import cieloImg from "../../../assets/cielo.svg";
-
-const PalabrasCorrectas = [
-  { palabra: "Perro", img: perroImg },
-  { palabra: "Hola", img: holaImg },
-  { palabra: "Tacos", img: tacosImg },
-  { palabra: "Amarillo", img: amarilloImg },
-  { palabra: "Carro", img: carroImg },
-  { palabra: "Elefante", img: elefanteImg },
-  { palabra: "Tienda", img: tiendaImg },
-  { palabra: "Adiós", img: adiosImg },
-  { palabra: "Refresco", img: refrescoImg },
-  { palabra: "Gato", img: gatoImg },
-  { palabra: "Autobús", img: autobusImg },
-  { palabra: "Montaña", img: montanaImg },
-  { palabra: "Libro", img: libroImg },
-  { palabra: "Ventana", img: ventanaImg },
-  { palabra: "Cielo", img: cieloImg },
-];
+import { senasConImagen as PalabrasCorrectas } from "../../../data/senasConImagen";
+import { tr } from "../../../i18n";
 
 export default function Quiz({ sidebarOpen, setSidebarOpen }) {
   const navigate = useNavigate();
@@ -73,8 +45,14 @@ export default function Quiz({ sidebarOpen, setSidebarOpen }) {
   const [bloqueado, setBloqueado] = useState(false);
   const [aciertos, setAciertos] = useState(0);
   const timeoutRef = useRef(null);
+  const audio = useAudioJuego();
 
   const juegoTerminado = preguntaActual >= preguntasJuego.length;
+
+  useEffect(() => {
+    if (juegoTerminado) audio.fin();
+  }, [juegoTerminado, audio.fin]);
+  usePartidaTerminada("quiz", juegoTerminado, aciertos, preguntasJuego.length);
 
   useCerrarSidebar(setSidebarOpen);
 
@@ -105,8 +83,13 @@ export default function Quiz({ sidebarOpen, setSidebarOpen }) {
     if (bloqueado) return;
     setSeleccion(opcion);
     setBloqueado(true);
-    if (opcion === preguntasJuego[preguntaActual]?.palabra) {
+    const correcta = preguntasJuego[preguntaActual]?.palabra;
+    registrarRespuesta(correcta, opcion === correcta);
+    if (opcion === correcta) {
       setAciertos((n) => n + 1);
+      audio.acierto(correcta);
+    } else {
+      audio.error(correcta);
     }
 
     // Esperar 2 segundos para ver el resultado y avanzar
@@ -137,9 +120,10 @@ export default function Quiz({ sidebarOpen, setSidebarOpen }) {
       }}
     >
 
-      <PageHeader />
+      <PageHeader title={tr("Quiz visual")} />
+      <FondoJuego tono={3} tono2={9} />
 
-      <div className="z-10 w-full max-w-5xl 2xl:max-w-[1400px]">
+      <div className="z-10 w-full max-w-6xl 2xl:max-w-[1500px]">
         
         {juegoTerminado ? (
           <GameOverCard
@@ -147,11 +131,9 @@ export default function Quiz({ sidebarOpen, setSidebarOpen }) {
             onReiniciar={reiniciarJuego}
             onSalir={() => navigate(-1)}
           >
-            <p className="text-lg sm:text-xl 2xl:text-2xl text-sutil mb-8 2xl:mb-10">
-              Acertaste{" "}
-              <strong className="text-exito text-3xl">{aciertos}</strong> de{" "}
-              {preguntasJuego.length} señas.
-            </p>
+            <p className="text-lg sm:text-xl 2xl:text-2xl text-sutil mb-8 2xl:mb-10">{tr("Acertaste")}{" "}
+              <strong className="text-exito text-3xl">{aciertos}</strong>{" "}{tr("de")}{" "}
+              {preguntasJuego.length}{" "}{tr("señas.")}</p>
           </GameOverCard>
         ) : (
           // La seña y las opciones se ponen en fila desde `md` (768) y no
@@ -168,70 +150,89 @@ export default function Quiz({ sidebarOpen, setSidebarOpen }) {
               animate={{ x: 0, opacity: 1 }}
               transition={{ type: "spring", stiffness: 100 }}
               style={{
-                width: "min(100%, clamp(8rem, 42vh, 28rem))",
+                width: "min(100%, clamp(10rem, 56vh, 36rem))",
                 aspectRatio: "1",
-                padding: "clamp(0.75rem, 2vw, 3rem)",
+                padding: "clamp(0.6rem, 1.4vw, 1.5rem)",
+                backgroundImage: "linear-gradient(135deg, rgb(var(--cat-3)), rgb(var(--cat-5)))",
               }}
-              className="bg-superficie rounded-[2rem] shadow-xl border border-borde shrink-0 flex items-center justify-center"
+              className="rounded-[2.5rem] shadow-2xl shrink-0"
             >
-              {preguntasJuego[preguntaActual]?.img ? (
-                <img 
-                  src={preguntasJuego[preguntaActual].img} 
-                  alt="Seña" 
+              <div className="h-full w-full rounded-[1.9rem] bg-white p-3 flex items-center justify-center">
+                <img
+                  src={preguntasJuego[preguntaActual]?.img}
+                  alt={tr("Seña")}
                   className="w-full h-full object-contain"
                 />
-              ) : (
-                <span className="text-sutil font-bold text-2xl">Imagen aquí</span>
-              )}
+              </div>
             </motion.div>
 
             <div
               data-tutorial="quiz-opciones"
-              className="w-full max-w-md 2xl:max-w-lg flex flex-col"
+              className="w-full max-w-lg 2xl:max-w-xl flex flex-col"
               style={{ gap: "clamp(0.5rem, 1.6vh, 1.25rem)" }}
             >
 
               <div className="flex flex-col items-center text-center mb-2">
-                <span className="text-sm md:text-base 2xl:text-lg font-bold uppercase tracking-[0.2em] text-acento">
-                  Pregunta {preguntaActual + 1} de {preguntasJuego.length}
+                <span className="text-base md:text-xl 2xl:text-2xl font-black uppercase tracking-[0.15em] text-acento">{tr("Pregunta")}{" "}{preguntaActual + 1}{" "}{tr("de")}{" "}{preguntasJuego.length}
                   <span className="ml-3 inline-flex items-center gap-1 text-exito">
                     {aciertos}
                     <Check className="w-4 h-4" strokeWidth={3} />
                   </span>
                 </span>
-                <p className="text-sm md:text-base 2xl:text-lg text-sutil mt-1">
-                  Elige la palabra que corresponde a la seña mostrada.
-                </p>
+                <p className="text-base md:text-lg 2xl:text-xl font-medium text-texto/80 mt-1">{tr("Elige la palabra que corresponde a la seña mostrada.")}</p>
               </div>
 
               {opciones.map((opcion, index) => {
-                
-                // Determinar colores de estado
-                let bgClass = "bg-superficie text-texto border-borde hover:border-acento hover:bg-acento-suave hover:shadow-md hover:-translate-y-0.5";
-                
+                // Cada opción tiene su color (la letra A-D va en una pastilla
+                // de ese tono); al responder manda el verde/rojo.
+                const tono = [1, 3, 5, 9][index];
+                let bgClass = "bg-superficie text-texto hover:shadow-xl";
+                let estiloBorde = { borderColor: `rgb(var(--cat-${tono}))` };
+                let pastilla = { backgroundColor: `rgb(var(--cat-${tono}))` };
+
                 if (seleccion) {
+                  estiloBorde = {};
+                  pastilla = {};
                   if (opcion === correctaActual) {
-                    bgClass = "bg-exito text-acento-texto border-exito shadow-lg scale-[1.02]";
+                    bgClass = "bg-exito text-acento-texto border-exito shadow-xl scale-[1.04]";
                   } else if (opcion === seleccion && opcion !== correctaActual) {
                     bgClass = "bg-error text-acento-texto border-error shadow-md";
                   } else {
-                    bgClass = "bg-superficie text-sutil border-borde opacity-60";
+                    bgClass = "bg-superficie text-sutil border-borde opacity-50";
                   }
                 }
 
                 return (
                   <motion.button
-                    key={index}
-                    whileTap={{ scale: 0.98 }}
+                    key={`${preguntaActual}-${index}`}
+                    initial={{ x: 40, opacity: 0 }}
+                    animate={
+                      seleccion && opcion === seleccion && opcion !== correctaActual
+                        ? { x: [0, -10, 10, -8, 8, 0], opacity: 1 }
+                        : { x: 0, opacity: 1 }
+                    }
+                    transition={{ type: "spring", stiffness: 260, damping: 20, delay: seleccion ? 0 : index * 0.07 }}
+                    whileHover={!bloqueado ? { x: 6, scale: 1.02 } : undefined}
+                    whileTap={{ scale: 0.97 }}
                     onClick={() => manejarClick(opcion)}
                     disabled={bloqueado}
                     style={{
-                      paddingBlock: "clamp(0.5rem, 1.6vh, 1rem)",
-                      paddingInline: "clamp(0.75rem, 1.6vw, 2rem)",
+                      ...estiloBorde,
+                      paddingBlock: "clamp(0.6rem, 2vh, 1.4rem)",
+                      paddingInline: "clamp(0.75rem, 1.4vw, 1.5rem)",
+                      fontSize: "clamp(1.1rem, 1.8vw, 1.9rem)",
                     }}
-                    className={`w-full rounded-2xl border-2 font-semibold text-base md:text-lg 2xl:text-xl text-center shadow-sm transition-all duration-300 ease-in-out ${bgClass}`}
+                    className={`w-full flex items-center gap-4 rounded-3xl border-4 font-bold text-left shadow-md transition-colors duration-300 ${bgClass}`}
                   >
-                    {letras[index]}) {opcion}
+                    <span
+                      style={pastilla}
+                      className={`grid shrink-0 place-items-center rounded-2xl font-black h-[1.9em] w-[1.9em] ${
+                        seleccion ? "bg-white/25" : "text-white"
+                      }`}
+                    >
+                      {letras[index]}
+                    </span>
+                    {opcion}
                   </motion.button>
                 );
               })}

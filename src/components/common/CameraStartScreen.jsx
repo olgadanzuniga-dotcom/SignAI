@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, Camera, Play } from "lucide-react";
+import { tr } from "../../i18n";
 
 // Clases por variante para conservar el diseño exacto de cada pantalla:
 // "sm" = la caja compacta del Desafío, "lg" = la versión amplia de las lecciones.
@@ -54,15 +55,15 @@ export default function CameraStartScreen({
       {loading ? (
         <div className="flex flex-col items-center">
           <div className={`animate-spin rounded-full border-4 border-acento border-t-transparent mb-3 ${v.spinner}`}></div>
-          <p className={`text-acento font-medium animate-pulse ${v.loadingTexto}`}>{loadingTexto}</p>
+          <p className={`text-acento font-medium animate-pulse ${v.loadingTexto}`}>{tr(loadingTexto)}</p>
         </div>
       ) : (
         <>
           <div className={`bg-superficie rounded-full ring-4 ring-borde transition-transform hover:scale-105 ${v.iconoWrap}`}>
             <Camera className={`text-sutil ${v.icono}`} />
           </div>
-          <h3 className={`font-bold text-texto ${v.titulo}`}>{titulo}</h3>
-          <p className={`text-sutil ${v.descripcion}`}>{descripcion}</p>
+          <h3 className={`font-bold text-texto ${v.titulo}`}>{tr(titulo)}</h3>
+          <p className={`text-sutil ${v.descripcion}`}>{tr(descripcion)}</p>
           {errorMsg && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
@@ -70,7 +71,7 @@ export default function CameraStartScreen({
               className="text-error text-xs sm:text-sm mb-3 sm:mb-5 bg-error/10 px-3 py-2 rounded-xl border border-error/30 flex items-center gap-2"
             >
               <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>{errorMsg}</span>
+              <span>{tr(errorMsg)}</span>
             </motion.div>
           )}
           <button
@@ -86,7 +87,7 @@ export default function CameraStartScreen({
             ) : (
               <Play fill="currentColor" className={v.play} />
             )}
-            {startLabel}
+            {tr(startLabel)}
           </button>
         </>
       )}

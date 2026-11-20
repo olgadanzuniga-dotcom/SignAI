@@ -1,12 +1,15 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Undo2, Delete, Eraser, Copy, Check, Volume2, SpaceIcon } from "lucide-react";
+import { Undo2, Delete, Eraser, Copy, Check, Volume2, SpaceIcon, GraduationCap } from "lucide-react";
+import EnsenarSena from "../common/EnsenarSena";
 import useSignServer from "../../hooks/useSignServer";
 import useSpeech from "../../hooks/useSpeech";
 import useTranscripcion from "../../hooks/useTranscripcion";
 import { esLetra } from "../../data/palabras";
 import Tutorial from "../common/Tutorial";
 import ServerStatusOverlay from "../common/ServerStatusOverlay";
+import { useIdioma, palabraSena } from "../../i18n";
+import VideoMotor from "../common/VideoMotor";
 
 const CAMARA_TUTORIAL_STEPS = [
   {
@@ -49,10 +52,10 @@ function BotonAccion({ Icon, children, onClick, disabled, destacado }) {
         onClick();
       }}
       disabled={disabled}
-      className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-95 disabled:opacity-40 disabled:active:scale-100 ${
+      className={`font-llamativa flex items-center gap-2 rounded-2xl px-5 py-3 text-base font-semibold tracking-wide transition-all active:scale-95 disabled:opacity-40 disabled:active:scale-100 ${
         destacado
-          ? "bg-white text-black hover:bg-white/90"
-          : "bg-white/15 text-white hover:bg-white/25"
+          ? "bg-gradient-to-r from-amber-300 via-pink-400 to-violet-500 text-white shadow-lg shadow-pink-500/30 hover:brightness-110"
+          : "bg-white/15 text-white ring-1 ring-white/20 hover:bg-white/25"
       }`}
     >
       <Icon size={18} strokeWidth={2.2} />
@@ -64,12 +67,17 @@ function BotonAccion({ Icon, children, onClick, disabled, destacado }) {
 export default function Camara({ setSidebarOpen }) {
   const navigate = useNavigate();
   const { speak } = useSpeech();
+  const { t } = useIdioma();
   const [fadeIn, setFadeIn] = useState(false);
   const [copiado, setCopiado] = useState(false);
   // El WebSocket puede seguir vivo y el stream MJPEG haberse cortado (el motor
   // perdió la cámara, el <img> se quedó a medias). Sin esto la pantalla se
   // quedaba en negro con el icono de imagen rota y ni un mensaje.
   const [videoFallo, setVideoFallo] = useState(false);
+  // Entre "el WS ya conectó" y "llegó el primer frame JPEG" (la cámara del
+  // motor tarda un instante en abrir) la pantalla se quedaba en negro sin
+  // ninguna pista de que algo estaba pasando.
+  const [videoCargado, setVideoCargado] = useState(false);
 
   const { texto, vacio, ultimaPalabra, deletreando, agregar, espacio, borrar, limpiar } =
     useTranscripcion();
@@ -80,10 +88,25 @@ export default function Camara({ setSidebarOpen }) {
   // le sirve a quien escucha y tapa el audio útil; una seña de palabra, en
   // cambio, ya es una unidad completa. Lo que se deletrea se lee al cerrar la
   // palabra con «Espacio» o con el botón «Leer todo».
+  // «Enseñar seña»: mientras se graban tomas, lo que se ve no se escribe.
+  const [ensenarAbierto, setEnsenarAbierto] = useState(false);
+  const [ensenando, setEnsenando] = useState(false);
+  const [eventoEnsenar, setEventoEnsenar] = useState(null);
+  const ensenandoRef = React.useRef(false);
+  ensenandoRef.current = ensenarAbierto || ensenando;
+  const handleEnsenar = useCallback(
+    (m) => setEventoEnsenar({ ...m, id: Date.now() + Math.random() }),
+    []
+  );
+
   const handleCommit = useCallback(
     (c) => {
-      agregar(c.letra);
-      if (!esLetra(c.letra)) speak(c.letra);
+      if (ensenandoRef.current) return;
+      // En inglés las señas de palabra se escriben y se leen traducidas
+      // (HOLA -> HELLO); las letras se deletrean igual.
+      const valor = esLetra(c.letra) ? c.letra : palabraSena(c.letra);
+      agregar(valor);
+      if (!esLetra(c.letra)) speak(valor);
     },
     [agregar, speak]
   );
@@ -91,7 +114,11 @@ export default function Camara({ setSidebarOpen }) {
   // El traductor debe reconocer letras y palabras en el mismo flujo: pide el
   // modelo "unificado" al conectar y deja el selector para cambiarlo a mano.
   const { connected, serverDown, engineError, videoUrl, status, modelos, modelo, setModelo } =
-    useSignServer({ modeloPreferido: "unificado", onCommit: handleCommit });
+    useSignServer({
+      modeloPreferido: "unificado",
+      onCommit: handleCommit,
+      onEnsenar: handleEnsenar,
+    });
 
   useEffect(() => {
     if (typeof setSidebarOpen === "function") setSidebarOpen(false);
@@ -104,7 +131,10 @@ export default function Camara({ setSidebarOpen }) {
 
   // Cada reconexión trae una URL nueva (lleva cache-bust): hay que volver a
   // darle una oportunidad al stream.
-  useEffect(() => setVideoFallo(false), [videoUrl]);
+  useEffect(() => {
+    setVideoFallo(false);
+    setVideoCargado(false);
+  }, [videoUrl]);
 
   const handleEspacio = useCallback(() => {
     // Sin nada que cerrar (mensaje vacío o ya terminado en espacio) no hay que
@@ -167,17 +197,32 @@ export default function Camara({ setSidebarOpen }) {
       } transition-opacity duration-500`}
     >
       {videoUrl && !videoFallo && (
-        <img
+        <VideoMotor
           src={videoUrl}
           data-tutorial="camara-video"
-          alt="Cámara"
+          alt={t("Cámara")}
           onError={() => setVideoFallo(true)}
+          onLoad={() => setVideoCargado(true)}
           className="fixed inset-0 w-full h-full object-cover"
         />
       )}
 
+      {/* El motor tarda un instante en abrir la cámara tras conectar (más la
+          primera vez, en frío): sin esto la pantalla se veía negra y parecía
+          que el traductor no cargaba. */}
+      {connected && videoUrl && !videoCargado && !videoFallo && (
+        <div className="fixed inset-0 flex flex-col items-center justify-center gap-3 text-white/80">
+          <div className="h-10 w-10 rounded-full border-2 border-white/25 border-t-white animate-spin" />
+          <p className="font-llamativa text-lg font-medium">{t("Abriendo la cámara…")}</p>
+        </div>
+      )}
+
       <div className="absolute top-0 left-0 w-full bg-black/40 py-4 text-center backdrop-blur-sm">
-        <h1 className="text-white text-2xl font-semibold tracking-wide">LSM Traductor</h1>
+        <h1 className="font-llamativa text-3xl font-bold tracking-wide">
+          <span className="bg-gradient-to-r from-amber-300 via-pink-400 to-violet-400 bg-clip-text text-transparent drop-shadow">
+            {t("Traductor LSM")}
+          </span>
+        </h1>
       </div>
 
       {/* Selector de modelo (solo si hay más de uno disponible) */}
@@ -193,7 +238,7 @@ export default function Camara({ setSidebarOpen }) {
                   : "text-white hover:bg-white/20"
               }`}
             >
-              {etiquetaModelo(m)}
+              {t(etiquetaModelo(m))}
             </button>
           ))}
         </div>
@@ -205,16 +250,32 @@ export default function Camara({ setSidebarOpen }) {
         className="absolute top-6 left-6 flex items-center gap-2 text-white bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg transition-all z-20"
       >
         <Undo2 size={22} strokeWidth={2.2} />
-        <span className="hidden sm:inline font-medium">Volver</span>
+        <span className="hidden sm:inline font-llamativa font-medium text-lg">{t("Volver")}</span>
       </button>
 
+      {connected && !ensenarAbierto && (
+        <button
+          onClick={() => setEnsenarAbierto(true)}
+          className={`absolute ${
+            modelos.length > 1 ? "top-20" : "top-6"
+          } right-6 z-20 flex items-center gap-2 rounded-lg bg-black/40 px-4 py-2 text-white transition-all hover:bg-black/60`}
+        >
+          <GraduationCap size={22} strokeWidth={2.2} />
+          <span className="hidden sm:inline font-llamativa font-medium text-lg">{t("Enseñar seña")}</span>
+        </button>
+      )}
+
       {/* Letra reconocida (la mas probable). Se mantiene hasta ver otra. */}
-      {status.letra && (
+      {status.letra && !ensenarAbierto && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center">
-          <div className="font-black leading-none drop-shadow-lg text-8xl text-green-400">
-            {status.letra}
+          <div
+            key={status.letra}
+            className="font-llamativa font-bold leading-none text-8xl bg-gradient-to-b from-lime-200 via-emerald-400 to-teal-500 bg-clip-text text-transparent animate-[aparecer_.25s_ease-out]"
+            style={{ filter: "drop-shadow(0 4px 14px rgba(16,185,129,.55))" }}
+          >
+            {esLetra(status.letra) ? status.letra : palabraSena(status.letra)}
           </div>
-          <div className="mt-1 text-sm font-medium bg-black/50 px-3 py-1 rounded-full">
+          <div className="font-llamativa mt-2 text-base font-semibold bg-black/55 ring-1 ring-emerald-300/40 px-4 py-1 rounded-full">
             {Math.round((status.conf || 0) * 100)}%
           </div>
         </div>
@@ -223,20 +284,30 @@ export default function Camara({ setSidebarOpen }) {
       {/* Mensaje que se va formando. Es la salida real del traductor: sin esto
           la seña se pronuncia y se pierde, y nadie puede leer lo que se dijo. */}
       {connected && (
+        <EnsenarSena
+          abierto={ensenarAbierto}
+          onCerrar={() => setEnsenarAbierto(false)}
+          evento={eventoEnsenar}
+          onActivoChange={setEnsenando}
+        />
+      )}
+
+      {connected && !ensenarAbierto && (
         <div className="absolute bottom-0 left-0 z-20 w-full bg-gradient-to-t from-black/95 via-black/70 to-transparent px-4 pb-5 pt-12">
           <div className="mx-auto flex max-w-3xl flex-col gap-3">
             <div
               data-tutorial="camara-transcripcion"
-              className="min-h-[5rem] rounded-2xl bg-black/60 px-5 py-4 backdrop-blur-sm"
+              className="min-h-[5.5rem] rounded-3xl bg-black/60 px-6 py-4 ring-1 ring-white/15 backdrop-blur-sm"
             >
               <p
                 aria-live="polite"
-                aria-label="Mensaje traducido"
-                className={`break-words text-3xl font-semibold leading-snug sm:text-4xl ${
-                  vacio ? "text-white/40" : "text-white"
+                aria-label={t("Mensaje traducido")}
+                className={`font-llamativa break-words text-4xl font-semibold leading-snug tracking-wide sm:text-5xl ${
+                  vacio ? "text-white/45" : "text-white"
                 }`}
+                style={vacio ? undefined : { textShadow: "0 2px 18px rgba(236,72,153,.35)" }}
               >
-                {vacio ? "Haz una seña para empezar…" : texto}
+                {vacio ? t("Haz una seña para empezar…") : texto}
               </p>
             </div>
 
@@ -247,27 +318,27 @@ export default function Camara({ setSidebarOpen }) {
                 disabled={vacio || texto.endsWith(" ")}
                 destacado
               >
-                Espacio
+                {t("Espacio")}
               </BotonAccion>
               <BotonAccion Icon={Delete} onClick={borrar} disabled={vacio}>
-                Borrar
+                {t("Borrar")}
               </BotonAccion>
               <BotonAccion Icon={Eraser} onClick={limpiar} disabled={vacio}>
-                Limpiar
+                {t("Limpiar")}
               </BotonAccion>
               <BotonAccion
                 Icon={Volume2}
                 onClick={() => speak(texto.trim())}
                 disabled={vacio}
               >
-                Leer todo
+                {t("Leer todo")}
               </BotonAccion>
               <BotonAccion
                 Icon={copiado ? Check : Copy}
                 onClick={handleCopiar}
                 disabled={vacio}
               >
-                {copiado ? "Copiado" : "Copiar"}
+                {copiado ? t("Copiado") : t("Copiar")}
               </BotonAccion>
             </div>
           </div>
@@ -279,7 +350,7 @@ export default function Camara({ setSidebarOpen }) {
           serverDown={serverDown}
           engineError={
             engineError ||
-            (videoFallo && connected ? "Se cortó la imagen de la cámara." : "")
+            (videoFallo && connected ? t("Se cortó la imagen de la cámara.") : "")
           }
           className="absolute inset-0 flex items-center justify-center p-6 z-30"
           boxClassName="bg-black/70 rounded-xl p-6 max-w-md text-center space-y-3 text-white"

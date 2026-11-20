@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { guardar, leer } from "../../utils/almacen";
+import { useIdioma } from "../../i18n";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -14,6 +15,7 @@ export default function Tutorial({
   const cardRef = useRef(null);
   const spotlightRef = useRef(null);
 
+  const { t } = useIdioma();
   const [active, setActive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [animarAgua, setAnimarAgua] = useState(false);
@@ -289,11 +291,11 @@ export default function Tutorial({
       >
         {currentStep.title && (
           <h4 className="font-bold text-base sm:text-lg mb-2 text-acento">
-            {currentStep.title}
+            {t(currentStep.title)}
           </h4>
         )}
         <p className="font-medium text-sm sm:text-base mb-5 leading-relaxed">
-          {currentStep.text}
+          {t(currentStep.text)}
         </p>
 
         <div className="flex items-center gap-3">
@@ -303,7 +305,7 @@ export default function Tutorial({
               disabled={!animarTexto}
               className="text-sutil hover:text-texto px-3 py-2 rounded-lg font-medium text-sm transition-all disabled:opacity-60"
             >
-              Saltar
+              {t("Saltar")}
             </button>
           )}
           <button
@@ -311,7 +313,7 @@ export default function Tutorial({
             disabled={!animarTexto}
             className="bg-acento hover:bg-acento-fuerte active:scale-95 text-acento-texto px-8 py-2.5 rounded-xl font-bold shadow-lg transition-all disabled:opacity-60 disabled:cursor-default"
           >
-            {isLastStep ? "Entendido" : "Continuar"}
+            {isLastStep ? t("Entendido") : t("Continuar")}
           </button>
         </div>
 

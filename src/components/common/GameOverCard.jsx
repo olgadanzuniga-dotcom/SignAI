@@ -1,5 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { useIdioma } from "../../i18n";
 
 // Tarjeta de fin de juego compartida por los 4 juegos. El mensaje (y un icono
 // opcional) van como children/props; los botones estándar se muestran según
@@ -16,6 +17,7 @@ export default function GameOverCard({
   salirLabel = "Regresar al menú",
   acciones = null,
 }) {
+  const { t } = useIdioma();
   return (
     <motion.div
       initial={{ scale: 0.8, opacity: 0 }}
@@ -32,7 +34,7 @@ export default function GameOverCard({
               onClick={onReiniciar}
               className="bg-acento-suave text-acento px-8 py-3 rounded-xl font-bold text-lg hover:bg-superficie-2 transition"
             >
-              {reiniciarLabel}
+              {t(reiniciarLabel)}
             </button>
           )}
           {onSalir && (
@@ -40,7 +42,7 @@ export default function GameOverCard({
               onClick={onSalir}
               className="bg-acento text-acento-texto px-8 py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-acento-fuerte transition"
             >
-              {salirLabel}
+              {t(salirLabel)}
             </button>
           )}
         </div>

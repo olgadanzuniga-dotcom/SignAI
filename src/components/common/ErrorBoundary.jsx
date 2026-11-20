@@ -1,4 +1,5 @@
 import React from "react";
+import { tr } from "../../i18n";
 
 /**
  * Red de seguridad para errores de render.
@@ -58,11 +59,8 @@ export default class ErrorBoundary extends React.Component {
     return (
       <div className="flex min-h-0 w-full flex-1 items-center justify-center bg-fondo p-6 text-texto">
         <div className="w-full max-w-lg rounded-3xl border border-borde bg-superficie p-8 text-center shadow-xl">
-          <h1 className="mb-3 text-2xl font-extrabold">Algo salió mal</h1>
-          <p className="mb-6 text-sutil">
-            Ocurrió un error inesperado en esta pantalla. Puedes reintentar o
-            volver al inicio; el resto de la aplicación sigue funcionando.
-          </p>
+          <h1 className="mb-3 text-2xl font-extrabold">{tr("Algo salió mal")}</h1>
+          <p className="mb-6 text-sutil">{tr("Ocurrió un error inesperado en esta pantalla. Puedes reintentar o volver al inicio; el resto de la aplicación sigue funcionando.")}</p>
           <pre className="mb-6 overflow-x-auto rounded-xl bg-superficie-2 p-3 text-left text-xs text-error">
             {String(error?.message || error)}
           </pre>
@@ -70,15 +68,11 @@ export default class ErrorBoundary extends React.Component {
             <button
               onClick={this.reintentar}
               className="rounded-xl bg-acento-suave px-6 py-3 font-bold text-acento transition hover:bg-superficie-2"
-            >
-              Reintentar
-            </button>
+            >{tr("Reintentar")}</button>
             <button
               onClick={this.handleVolver}
               className="rounded-xl bg-acento px-8 py-3 font-bold text-acento-texto shadow-lg transition hover:bg-acento-fuerte"
-            >
-              Volver al inicio
-            </button>
+            >{tr("Volver al inicio")}</button>
           </div>
         </div>
       </div>

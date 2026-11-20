@@ -11,6 +11,8 @@ import Tutorial from "../../common/Tutorial";
 import PageLayout from "../../common/PageLayout";
 import CameraStartScreen from "../../common/CameraStartScreen";
 import ServerStatusOverlay from "../../common/ServerStatusOverlay";
+import VideoMotor from "../../common/VideoMotor";
+import { tr } from "../../../i18n";
 
 // Qué letras puede validar cada modelo del servidor. Con "unificado" también
 // entran las letras con movimiento (J, Q, RR, X, Z, Ñ); con "estatico" solo las
@@ -178,10 +180,10 @@ export default function LeccionAprender({
             {camaraActiva ? (
               <>
                 {validarConModelo ? (
-                  <img
+                  <VideoMotor
                     src={videoUrl}
                     data-tutorial="leccion-camara-activa"
-                    alt="Cámara"
+                    alt={tr("Cámara")}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 ) : (
@@ -229,18 +231,16 @@ export default function LeccionAprender({
                     onClick={stopStream}
                     className="absolute top-3 right-3 sm:top-4 sm:right-4 lg:top-5 lg:right-5 bg-red-500/90 hover:bg-red-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 lg:px-5 lg:py-2.5 rounded-full text-[10px] sm:text-xs lg:text-sm font-bold backdrop-blur-sm transition z-20 flex items-center gap-1.5 sm:gap-2 shadow-lg"
                   >
-                    <StopCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5" />
-                    DETENER
-                  </button>
+                    <StopCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5" />{tr("DETENER")}</button>
                 )}
 
                 <div className="absolute bottom-3 left-3 sm:bottom-5 sm:left-5 lg:bottom-7 lg:left-7 bg-black/60 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 lg:px-5 lg:py-2.5 rounded-full text-[10px] sm:text-xs lg:text-sm font-medium border border-white/10 text-white flex items-center gap-1.5 sm:gap-2 z-20">
                   <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.8)]"></div>
                   {validarConModelo
                     ? letraSoportada
-                      ? "Haz la seña de la letra"
-                      : "Sin validación automática"
-                    : "Cámara activa"}
+                      ? tr("Haz la seña de la letra")
+                      : tr("Sin validación automática")
+                    : tr("Cámara activa")}
                 </div>
 
                 {/* Acierto: manual en modo manual; en modo modelo solo para
@@ -253,15 +253,11 @@ export default function LeccionAprender({
                     className="absolute bottom-3 right-3 sm:bottom-5 sm:right-5 lg:bottom-7 lg:right-7 bg-green-500 hover:bg-green-600 text-white px-4 py-2 sm:px-5 sm:py-2.5 lg:px-6 lg:py-3 rounded-full font-bold shadow-lg transition z-20 animate-bounce text-xs sm:text-sm lg:text-base inline-flex items-center gap-1.5"
                   >
                     {validarConModelo ? (
-                      <>
-                        Siguiente
-                        <ArrowRight className="w-4 h-4" />
+                      <>{tr("Siguiente")}<ArrowRight className="w-4 h-4" />
                       </>
                     ) : (
                       <>
-                        <Check className="w-4 h-4" strokeWidth={3} />
-                        Simular Acierto
-                      </>
+                        <Check className="w-4 h-4" strokeWidth={3} />{tr("Simular Acierto")}</>
                     )}
                   </button>
                 )}
@@ -270,8 +266,8 @@ export default function LeccionAprender({
                 {validarConModelo && !letraSoportada && (
                   <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-amber-500/90 text-black text-xs font-semibold px-3 py-1.5 rounded-full">
                     {modelo === "estatico" && senasDinamicas.has(objetivo)
-                      ? "Esta letra lleva movimiento; el modelo estático no la detecta"
-                      : "Esta letra aún no está en el modelo; avanza manualmente"}
+                      ? tr("Esta letra lleva movimiento; el modelo estático no la detecta")
+                      : tr("Esta letra aún no está en el modelo; avanza manualmente")}
                   </div>
                 )}
 
@@ -289,8 +285,7 @@ export default function LeccionAprender({
                 dataTutorial="leccion-iniciar"
                 startLabel="Iniciar Cámara"
                 descripcion={
-                  <>
-                    Dale clic a iniciar para empezar a practicar desde{" "}
+                  <>{tr("Dale clic a iniciar para empezar a practicar desde")}{" "}
                     <strong className="text-acento">{items[0]?.label}</strong>
                   </>
                 }

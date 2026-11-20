@@ -5,10 +5,17 @@ import { CSSTransition, TransitionGroup } from "react-transition-group";
 
 import Sidebar from "./components/Sidebar";
 import ErrorBoundary from "./components/common/ErrorBoundary";
+import ThemeToggle from "./components/common/ThemeToggle";
+import KidModeToggle from "./components/common/KidModeToggle";
+import IdiomaToggle from "./components/common/IdiomaToggle";
+import { useIdioma, tr } from "./i18n";
 import useMediaQuery, { CONSULTA_ESTRECHA } from "./hooks/useMediaQuery";
 import { leer } from "./utils/almacen";
 import useScrolled from "./hooks/useScrolled";
 import { useThemeContext } from "./context/ThemeContext";
+import useAutoCamara from "./hooks/useAutoCamara";
+import Bienvenida from "./components/common/Bienvenida";
+import { usePerfil } from "./utils/perfil";
 
 import Home from "./components/Home.jsx";
 import Ajustes from "./components/pages/Ajustes";
@@ -23,6 +30,12 @@ import Aprender from "./components/pages/Aprender";
 import JuegosInteractivos from "./components/pages/Juegos.jsx";
 import Memorama from "./components/pages/Juegos/Memorama.jsx";
 import LeccionRoute from "./components/pages/Aprender/LeccionRoute.jsx";
+import Infantil from "./components/pages/Infantil.jsx";
+import RepasoABC from "./components/pages/Juegos/RepasoABC.jsx";
+import SiNo from "./components/pages/Juegos/SiNo.jsx";
+import LetraFalta from "./components/pages/Juegos/LetraFalta.jsx";
+import RepasoLetras from "./components/pages/Aprender/RepasoLetras.jsx";
+import Tutores from "./components/pages/Tutores.jsx";
 
 import "./transitions.css";
 
@@ -43,7 +56,7 @@ function MainLayout({ sidebarOpen, tutorialActivo, setSidebarOpen }) {
       {showMenu && (
         <button
           onClick={() => setSidebarOpen(true)}
-          aria-label="Abrir menú"
+          aria-label={tr("Abrir menú")}
           className="absolute top-4 left-8 z-50 bg-superficie text-texto
                      shadow-md rounded-md p-2 hover:bg-superficie-2
                      transition flex items-center justify-center"
@@ -52,10 +65,18 @@ function MainLayout({ sidebarOpen, tutorialActivo, setSidebarOpen }) {
         </button>
       )}
 
+      {showMenu && (
+        <div className="absolute top-4 right-8 z-50 flex items-center gap-2">
+          <IdiomaToggle />
+          <ThemeToggle />
+          <KidModeToggle />
+        </div>
+      )}
+
       {/* Barra fija con botón de menú cuando se hace scroll */}
       {showMenu && (
         <div
-          className={`fixed top-0 right-0 z-30 flex items-center px-4 sm:px-8 py-3
+          className={`fixed top-0 right-0 z-30 flex items-center justify-between px-4 sm:px-8 py-3
             bg-fondo/80 backdrop-blur-md
             border-b border-borde
             transition-all duration-500 ease-out
@@ -64,13 +85,18 @@ function MainLayout({ sidebarOpen, tutorialActivo, setSidebarOpen }) {
         >
           <button
             onClick={() => setSidebarOpen(true)}
-            aria-label="Abrir menú"
+            aria-label={tr("Abrir menú")}
             className="bg-superficie text-texto
                        shadow-md rounded-md p-2 hover:bg-superficie-2
                        transition flex items-center justify-center"
           >
             <Menu size={22} strokeWidth={2.2} />
           </button>
+          <div className="flex items-center gap-2">
+            <IdiomaToggle />
+            <ThemeToggle />
+            <KidModeToggle />
+          </div>
         </div>
       )}
 
@@ -97,6 +123,12 @@ export default function App() {
   const { isDark } = useThemeContext();
   const prevDarkRef = useRef(isDark);
   const zoomTimersRef = useRef([]);
+
+  useAutoCamara();
+  const perfil = usePerfil();
+  // Al cambiar de idioma se vuelve a montar el contenido: así hasta los textos
+  // calculados una sola vez (listas, tutoriales) salen en el idioma nuevo.
+  const { idioma } = useIdioma();
 
   // Por debajo de 1024 no sobran 240px: la barra lateral se superpone en vez
   // de empujar el contenido (ver `useMediaQuery`).
@@ -168,7 +200,7 @@ export default function App() {
           sidebarOpen && !estrecha ? "ml-60" : "ml-0"
         }`}
       >
-        <main className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden scroll-smooth">
+        <main key={idioma} className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden scroll-smooth">
           <div className="flex-1 flex flex-col w-full">
             <TransitionGroup component={null}>
               <CSSTransition
@@ -202,6 +234,12 @@ export default function App() {
                       <Route path="/Juegos" element={<JuegosInteractivos sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
                       <Route path="/Aprender" element={<Aprender sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
                       <Route path="/Quiz" element={<Quiz sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
+                      <Route path="/SiNo" element={<SiNo setSidebarOpen={setSidebarOpen} />} />
+                      <Route path="/LetraFalta" element={<LetraFalta setSidebarOpen={setSidebarOpen} />} />
+                      <Route path="/Infantil" element={<Infantil sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
+                      <Route path="/RepasoABC" element={<RepasoABC sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
+                      <Route path="/RepasoLetras" element={<RepasoLetras sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />} />
+                      <Route path="/Tutores" element={<Tutores setSidebarOpen={setSidebarOpen} />} />
                     </Route>
 
                     {/* Cualquier ruta desconocida (hash mal escrito, enlace
@@ -216,6 +254,9 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {/* Primera vez (o tras "Volver a escribir mi nombre" en Ajustes). */}
+      {!perfil && <Bienvenida />}
     </div>
   );
 }

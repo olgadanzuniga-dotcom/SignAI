@@ -147,6 +147,52 @@ def movimiento_global(frame_prev, frame_curr) -> float:
     return sum(vals) / len(vals)
 
 
+class PisoRuido:
+    """
+    Umbrales de movimiento que se adaptan al temblor de la camara.
+
+    Con poca luz la camara baja de fps y MediaPipe tiembla: con la mano en
+    reposo el "movimiento" medido llegaba a ~0.009, por encima del umbral de
+    arranque (0.008) y muy por encima del de quietud (0.004), y las señas no
+    se cerraban hasta el tope de 6 s. Se estima el temblor como el percentil
+    20 del movimiento de los ultimos segundos y los umbrales nunca bajan de
+    los fijos: con buena luz todo funciona exactamente igual que antes.
+    """
+    VENTANA_MS = 4000
+    PERCENTIL = 20
+    FACTOR_QUIETUD = 2.0
+    FACTOR_INICIO = 2.5
+    TOPE_QUIETUD = 0.015
+    TOPE_INICIO = 0.025
+
+    def __init__(self):
+        from collections import deque
+        self.hist = deque()
+        self.piso = 0.0
+
+    def agregar(self, t_ms, mov):
+        self.hist.append((t_ms, mov))
+        while self.hist and t_ms - self.hist[0][0] > self.VENTANA_MS:
+            self.hist.popleft()
+        if len(self.hist) > 10:
+            import numpy as _np
+            self.piso = float(_np.percentile([m for _, m in self.hist], self.PERCENTIL))
+
+    def limpiar(self):
+        self.hist.clear()
+        self.piso = 0.0
+
+    @property
+    def quietud(self):
+        return min(max(UMBRAL_QUIETUD_DINAMICO, self.piso * self.FACTOR_QUIETUD),
+                   self.TOPE_QUIETUD)
+
+    @property
+    def inicio(self):
+        return min(max(UMBRAL_MOVIMIENTO, self.piso * self.FACTOR_INICIO),
+                   self.TOPE_INICIO)
+
+
 def puntos_de_landmarks(landmarks) -> list[tuple[float, float, float]]:
     """MediaPipe landmarks -> lista de tuplas (x, y, z)."""
     return [(lm.x, lm.y, lm.z) for lm in landmarks.landmark]
@@ -275,14 +321,29 @@ def extraer_manos(results) -> dict:
           else [None] * len(hl))
     hn = results.multi_handedness
 
+    detectadas = []
     for img_lm, w_lm, hness in zip(hl, wl, hn):
         cls = hness.classification[0]
-        tipo = cls.label  # "Right" | "Left"
-        score = float(cls.score)
         img_pts = puntos_de_landmarks(img_lm)
         world_pts = puntos_de_landmarks(w_lm) if w_lm is not None else img_pts
+        detectadas.append((cls.label,  # "Right" | "Left"
+                           {"image": img_pts, "world": world_pts,
+                            "score": float(cls.score)}))
+
+    # Con las manos juntas o cruzadas MediaPipe a veces etiqueta las DOS con el
+    # mismo lado; antes la segunda se descartaba y la seña a dos manos llegaba
+    # con una sola. Se resuelve por posicion: el frame ya viene en espejo, asi
+    # que la mano derecha del usuario es la que queda mas a la derecha (x mayor).
+    if len(detectadas) == 2 and detectadas[0][0] == detectadas[1][0]:
+        a, b = detectadas[0][1], detectadas[1][1]
+        if a["image"][WRIST][0] < b["image"][WRIST][0]:
+            a, b = b, a
+        out["Right"], out["Left"] = a, b
+        return out
+
+    for tipo, mano in detectadas:
         if out.get(tipo) is None:
-            out[tipo] = {"image": img_pts, "world": world_pts, "score": score}
+            out[tipo] = mano
     return out
 
 

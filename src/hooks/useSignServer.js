@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-
-// Servidor local de inferencia (Python). El mismo proceso sirve el video
-// MJPEG y los eventos por WebSocket. El host se puede cambiar con
-// VITE_SIGNAI_HOST en .env (debe coincidir con SIGNAI_PORT del servidor).
-const HOST = import.meta.env.VITE_SIGNAI_HOST || "127.0.0.1:8765";
-const HTTP = `http://${HOST}`;
-const WS_URL = `ws://${HOST}/ws`;
+import { HTTP, WS_URL } from "../utils/signServer";
 
 // Reintentos de conexión: backoff exponencial 1s → 8s. Tras DOWN_AFTER_ATTEMPTS
 // intentos fallidos seguidos se expone `serverDown` para que la UI avise al
@@ -49,6 +43,7 @@ export default function useSignServer({
   enabled = true,
   modeloPreferido,
   onCommit,
+  onEnsenar,
 } = {}) {
   const [connected, setConnected] = useState(false);
   const [serverDown, setServerDown] = useState(false);
@@ -69,6 +64,8 @@ export default function useSignServer({
 
   const onCommitRef = useRef(onCommit);
   onCommitRef.current = onCommit;
+  const onEnsenarRef = useRef(onEnsenar);
+  onEnsenarRef.current = onEnsenar;
   const commitSeq = useRef(0);
 
   // Lista estable de preferencias (acepta string o array) para no re-disparar
@@ -186,6 +183,9 @@ export default function useSignServer({
             hand: !!msg.hand,
             buffer: msg.buffer || 0,
           });
+        } else if (msg.tipo === "ensenar") {
+          // Resultado de cada toma en la pantalla «Enseñar seña».
+          onEnsenarRef.current?.(msg);
         } else if (msg.tipo === "commit") {
           const c = { letra: msg.letra, conf: msg.conf, id: ++commitSeq.current };
           setLastCommit(c);

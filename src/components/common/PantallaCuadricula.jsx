@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import PageHeader from "./PageHeader";
+import { useIdioma } from "../../i18n";
 
 /**
  * Pantalla de cuadrícula de tarjetas: Aprender, Aprendizaje y Juegos.
@@ -41,6 +42,7 @@ export default function PantallaCuadricula({
   children,
   tutorial,
 }) {
+  const { t } = useIdioma();
   return (
     <div className="isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-fondo text-texto">
       <PageHeader showBack={mostrarVolver} />
@@ -67,7 +69,7 @@ export default function PantallaCuadricula({
                 className="font-extrabold tracking-tight text-texto"
                 style={{ fontSize: "clamp(1.6rem, 3.1vw, 3.5rem)", lineHeight: 1.1 }}
               >
-                {titulo}
+                {t(titulo)}
               </h2>
             )}
             {subtitulo && (
@@ -75,7 +77,7 @@ export default function PantallaCuadricula({
                 className="text-sutil"
                 style={{ fontSize: "clamp(0.85rem, 1.05vw, 1.3rem)", marginTop: "0.35em" }}
               >
-                {subtitulo}
+                {t(subtitulo)}
               </p>
             )}
           </header>

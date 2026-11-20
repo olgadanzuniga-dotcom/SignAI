@@ -35,6 +35,13 @@ Uso:
 from __future__ import annotations
 
 import os
+
+# (2026-11-12) Debe ir ANTES de importar cv2. Con las "transformaciones por
+# hardware" de MSMF activas, abrir la webcam y fijar 1280x720 tardaba ~9 s
+# (medido: 3.1 s abrir + 5.4 s negociar resolución). Sin ellas: ~1.1 s, mismos
+# 30 fps e imagen igual. setdefault: se puede volver a activar desde fuera.
+os.environ.setdefault("OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS", "0")
+
 import json
 import secrets
 import tempfile
@@ -52,7 +59,7 @@ import torch
 
 from comun import (
     crear_hands, extraer_manos, features_frame, ahora_ms, DIR_MODELOS,
-    SignTransformer, movimiento_global,
+    SignTransformer, movimiento_global, PisoRuido,
     FRAMES_ESTATICO, FPS_OBJETIVO, UMBRAL_MOVIMIENTO, UMBRAL_QUIETUD_DINAMICO,
     MS_QUIETUD_PARA_FIN, MS_MARGEN_TRIM, SEG_MIN_DINAMICO, SEG_MAX_DINAMICO,
 )
@@ -63,6 +70,8 @@ from SignAI import (
     IDLE, DETECTANDO,
 )
 
+from senas_nuevas import ReconocedorSenasNuevas, frame_dict, corregir_intercambio
+
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -70,8 +79,44 @@ import uvicorn
 
 
 PORT = int(os.environ.get("SIGNAI_PORT", "8765"))
-NUM_MANOS = int(os.environ.get("SIGNAI_MANOS", "1"))   # abecedario = 1 mano
+# MediaPipe busca hasta 2 manos: las señas nuevas (AMARILLO, AZUL...) son de
+# dos manos. El Transformer se entreno con una sola, asi que a el se le pasa
+# solo la mano mas segura (ver mano_para_modelo).
+NUM_MANOS = int(os.environ.get("SIGNAI_MANOS", "2"))
 CAM_INDEX = int(os.environ.get("SIGNAI_CAM", "0"))
+MAX_CAMARAS_A_PROBAR = 6   # indices 0..5; mas que eso ya no es realista en un equipo de escritorio
+
+
+def listar_camaras(saltar: int | None = None) -> list[dict]:
+    """Prueba los primeros indices de camara (via DirectShow en Windows, que
+    abre casi al instante) y devuelve los que sí abren. OpenCV no da nombres
+    de dispositivo sin dependencias extra, asi que se etiquetan por indice —
+    igual que ya hacia el selector cuando el navegador no daba un `label`.
+
+    `saltar`: el indice que el motor tiene abierto AHORA MISMO (si lo tiene).
+    Probar ese mismo indice con un VideoCapture aparte compite por el mismo
+    dispositivo exclusivo y el driver de Windows puede tirar una excepcion de
+    C++ al soltarlo (visto en vivo: crasheaba /camaras si alguien probaba la
+    lista mientras el traductor estaba abierto en otra pestaña logica). Como
+    ya sabemos que ese indice funciona -esta en uso-, se agrega sin probarlo.
+    """
+    disponibles = []
+    for i in range(MAX_CAMARAS_A_PROBAR):
+        if i == saltar:
+            disponibles.append({"indice": i, "nombre": f"Cámara {i + 1}"})
+            continue
+        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW) if os.name == "nt" else cv2.VideoCapture(i)
+        try:
+            if cap.isOpened():
+                disponibles.append({"indice": i, "nombre": f"Cámara {i + 1}"})
+        except cv2.error as e:
+            print(f"[camaras] indice {i} no se pudo probar: {e}", flush=True)
+        finally:
+            try:
+                cap.release()
+            except cv2.error as e:
+                print(f"[camaras] indice {i} no se pudo soltar: {e}", flush=True)
+    return disponibles
 
 # --- Autorizacion ---------------------------------------------------------
 # Este proceso ENCIENDE LA CAMARA cuando algo se conecta a /ws o /video. Sin
@@ -119,8 +164,12 @@ COMMIT_CONF_SEG = float(os.environ.get("SIGNAI_COMMIT_CONF_SEG",
                                        str(COMMIT_CONF)))
 
 # La letra mostrada cambia solo si otra clase gana en LIVE_SWITCH_FRAMES
-# inferencias seguidas (anti-parpadeo).
-LIVE_SWITCH_FRAMES = int(os.environ.get("SIGNAI_SWITCH_FRAMES", "3"))
+# inferencias seguidas (anti-parpadeo). Bajado de 3 a 2: con 3, el tramo
+# entre "se ve la letra en verde" y "se coloca en el mensaje" se sentia
+# lento (~9 frames de margen extra solo para confirmar). Con 2 sigue exigiendo
+# que dos lecturas coincidan (no comete con un solo frame ruidoso) pero
+# recorta ese margen a la mitad.
+LIVE_SWITCH_FRAMES = int(os.environ.get("SIGNAI_SWITCH_FRAMES", "2"))
 
 # Pasadas de TTA para la inferencia continua (estatico). La inferencia unica
 # por segmento (dinamico) usa el default de SignAI.py (4).
@@ -129,6 +178,9 @@ N_TTA_LIVE = int(os.environ.get("SIGNAI_TTA", "2"))
 # Tras un commit dinamico, ms antes de aceptar movimiento como senia nueva
 # (evita que la cola del mismo gesto dispare otro segmento).
 MS_COOLDOWN_SEGMENTO = 500
+# Una toma para «Enseñar seña» que dura mas que esto fue la seña repetida o
+# sin pausa: no sirve de referencia.
+MS_TOMA_MAX = 4500
 
 # Frames previos al inicio de movimiento que se conservan en el segmento
 # dinamico, para no perder el arranque de la senia.
@@ -188,6 +240,22 @@ def coords_de_modelo(nombre: str, meta: dict | None) -> str:
     if meta and meta.get("coords") in ("image", "world"):
         return meta["coords"]
     return "world" if nombre == "dinamico" else "image"
+
+
+DEBUG_SEG = os.environ.get("SIGNAI_DEBUG", "") == "1"
+
+# Segmentos de al menos esta duracion que no se reconocen enteros se revisan
+# por ventanas buscando una seña nueva (ver lanzar_ventanas).
+MS_SEG_LARGO = 4000
+
+
+def mano_para_modelo(manos: dict) -> dict:
+    """Con dos manos a la vista, el Transformer (entrenado a una mano) recibe
+    solo la de mayor confianza, como cuando MediaPipe buscaba una sola."""
+    r, l = manos.get("Right"), manos.get("Left")
+    if r and l:
+        return {"Right": r, "Left": None} if r["score"] >= l["score"]             else {"Right": None, "Left": l}
+    return manos
 
 
 def resamplear_a_fps(feats: list, ts: list, fps: int) -> list:
@@ -253,7 +321,16 @@ class Engine:
 
         self.modelos: dict[str, Path] = {}
         self.modelo_actual: str | None = None
+        # Señas agregadas sin reentrenar (comparacion con grabaciones).
+        self.senas_nuevas = ReconocedorSenasNuevas()
         self._pending_modelo: str | None = None   # lo aplica el hilo del engine
+        # Pantalla «Enseñar seña»: mientras tenga un nombre, cada seña que se
+        # haga se guarda como toma propia de esa seña en vez de traducirse.
+        self.ensenar: str | None = None
+
+        self.cam_index = CAM_INDEX
+        self._pending_cam_index: int | None = None  # lo aplica el hilo del engine
+        self._cam_lock = threading.Lock()
 
         self._running = True
         self._consumers = 0
@@ -296,6 +373,7 @@ class Engine:
         self.model, self.clases, self.meta = cargar_modelo_en(
             self.modelos[self.modelo_actual], self.device)
         print(f"[engine] clases ({len(self.clases)}): {self.clases}")
+        print(f"[engine] señas nuevas: {self.senas_nuevas.clases}")
         self._thread.start()
 
     def stop(self):
@@ -309,6 +387,15 @@ class Engine:
         # Bajo lock: dos POST /modelo seguidos perdian uno de los dos.
         with self._modelo_lock:
             self._pending_modelo = key
+        return True
+
+    def set_camara(self, indice: int) -> bool:
+        """Solicita cambiar a la camara `indice`; lo aplica el hilo del engine
+        en el proximo ciclo, forzando a reabrir el dispositivo."""
+        if indice < 0 or indice > 15:
+            return False
+        with self._cam_lock:
+            self._pending_cam_index = indice
         return True
 
     def add_consumer(self):
@@ -338,7 +425,8 @@ class Engine:
             "consumidores": self._consumers,
             "modelo": modelo,
             "modelos": sorted(self.modelos),
-            "clases": clases,
+            "clases": clases + [c for c in self.senas_nuevas.clases if c not in clases],
+            "camara_indice": self.cam_index,
             "fallo": self._fallo,
         }
 
@@ -399,20 +487,44 @@ class Engine:
         pred_history = deque(maxlen=LIVE_SWITCH_FRAMES + 2)
 
         # --- modo dinamico / combinado: segmentacion por movimiento ---
-        pre_buffer = deque(maxlen=PRE_BUFFER_LEN)   # (feat, ts) previos al movimiento
+        pre_buffer = deque(maxlen=PRE_BUFFER_LEN)   # (feat, ts, fd) previos al movimiento
         seg_feats: list = []
+        seg_fds: list = []      # manos crudas del segmento (señas nuevas)
+        ultimas_munecas: dict = {}
         seg_ts: list = []
         seg_movs: list = []
         grabando = False
         quietud_desde_ms = None
         mov_seguidos = 0
+        ruido = PisoRuido()   # umbrales que se adaptan al temblor de la camara
         pts_img_prev = None
         cooldown_hasta_ms = 0
+        # Busqueda por ventanas (segmentos largos) en un hilo aparte: tarda
+        # ~1 s y congelaria la camara. resultado_ventanas[0] = (seña, conf).
+        resultado_ventanas: list = [None]
+        hilo_ventanas: list = [None]
+
+        def lanzar_ventanas(fds, ts):
+            if hilo_ventanas[0] is not None and hilo_ventanas[0].is_alive():
+                return
+            def trabajo():
+                try:
+                    sena, conf, votos = self.senas_nuevas.reconocer_ventanas(
+                        fds, ts, anchos_ms=(2000,), paso=6, min_votos=3)
+                    if DEBUG_SEG:
+                        print(f"[debug] ventanas: {votos}", flush=True)
+                    if sena is not None:
+                        resultado_ventanas[0] = (sena, conf)
+                except Exception:
+                    traceback.print_exc()
+            hilo_ventanas[0] = threading.Thread(target=trabajo, daemon=True)
+            hilo_ventanas[0].start()
 
         def reset_segmento():
             nonlocal grabando, quietud_desde_ms, mov_seguidos
             pre_buffer.clear()
             seg_feats.clear()
+            seg_fds.clear()
             seg_ts.clear()
             seg_movs.clear()
             grabando = False
@@ -433,6 +545,102 @@ class Engine:
             live_top3 = None
             pts_img_prev = None
             cooldown_hasta_ms = 0
+            ultimas_munecas.clear()
+
+        def cerrar_segmento(limite_ms, ahora):
+            """Clasifica el segmento grabado (recortado hasta limite_ms si se
+            da) y lo resetea. Devuelve (seña, conf) a confirmar o None."""
+            nonlocal shown_txt, shown_conf, live_top3, cooldown_hasta_ms, estado
+            feats_seg, fds_seg, ts_seg = seg_feats, seg_fds, seg_ts
+            if limite_ms is not None:
+                k = sum(1 for t in seg_ts if t <= limite_ms)
+                feats_seg, fds_seg, ts_seg = seg_feats[:k], seg_fds[:k], seg_ts[:k]
+            dur_util = (ts_seg[-1] - ts_seg[0]) if feats_seg else 0
+            # Un segmento sin movimiento real fue temblor, no una senia.
+            movio = (
+                len(seg_movs) > 0
+                and float(np.mean(seg_movs)) >= ruido.quietud
+                and float(np.max(seg_movs)) >= ruido.inicio
+            )
+            valido = movio and len(feats_seg) >= 2 and dur_util >= SEG_MIN_DINAMICO * 1000
+            if DEBUG_SEG:
+                print(f"[debug] fin de segmento: {len(feats_seg)} frames, "
+                      f"{dur_util} ms, movio={movio}, recortado={limite_ms is not None}, "
+                      f"piso={ruido.piso:.4f} quietud={ruido.quietud:.4f} "
+                      f"inicio={ruido.inicio:.4f}", flush=True)
+            commit = None
+            sena_ens = self.ensenar
+            if sena_ens:
+                cooldown_hasta_ms = ahora + MS_COOLDOWN_SEGMENTO
+                if not valido:
+                    pass  # temblor o movimiento muy corto: ni se avisa
+                elif dur_util > MS_TOMA_MAX:
+                    self.broadcast({"tipo": "ensenar", "sena": sena_ens, "ok": False,
+                                    "msg": "Fue muy larga. Hazla una sola vez y baja las manos."})
+                else:
+                    try:
+                        n = self.senas_nuevas.agregar_toma(
+                            sena_ens, list(fds_seg), list(ts_seg))
+                    except Exception:
+                        traceback.print_exc()
+                        n = 0
+                    print(f"[enseñar] {sena_ens}: toma guardada ({n})", flush=True)
+                    self.broadcast({"tipo": "ensenar", "sena": sena_ens, "ok": n > 0,
+                                    "tomas": n,
+                                    "msg": "" if n else "No vi bien las manos. Otra vez."})
+                reset_segmento()
+                return None
+            if valido:
+                # Primero las señas nuevas: el Transformer no las conoce y
+                # diria otra cosa con confianza.
+                sena_n, conf_n, pcts_n = self.senas_nuevas.reconocer(
+                    list(fds_seg), list(ts_seg))
+                if DEBUG_SEG and pcts_n:
+                    print(f"[debug] señas nuevas: {pcts_n}", flush=True)
+                if DEBUG_SEG:
+                    try:
+                        d = Path(tempfile.gettempdir()) / "signai_segs"
+                        d.mkdir(exist_ok=True)
+                        (d / f"seg_{int(ahora)}.json").write_text(json.dumps(
+                            {"fds": list(fds_seg), "ts": list(ts_seg),
+                             "pcts": pcts_n}), encoding="utf-8")
+                    except Exception as e:
+                        print(f"[debug] no se guardo el segmento: {e}", flush=True)
+                cooldown_hasta_ms = ahora + MS_COOLDOWN_SEGMENTO
+                if sena_n is not None:
+                    orden = sorted(pcts_n, key=pcts_n.get, reverse=True)[:3]
+                    live_top3 = [[c, pcts_n[c] / 100.0] for c in orden]
+                    shown_txt, shown_conf = sena_n, conf_n
+                    commit = (shown_txt, shown_conf)
+                    estado = ESPERA
+                    print(f"[seña nueva] {shown_txt}  ({shown_conf*100:.0f}%)", flush=True)
+                else:
+                    feats_r = resamplear_a_fps(list(feats_seg), list(ts_seg), FPS_OBJETIVO)
+                    X, mask = construir_tensor(feats_r)
+                    pred_idx, conf, probs = inferir_tta(self.model, X, mask, self.device)
+                    top_idx = np.argsort(-probs)[:3]
+                    live_top3 = [[self.clases[i], float(probs[i])] for i in top_idx]
+                    if DEBUG_SEG:
+                        print("[debug] transformer top3: "
+                              + ", ".join(f"{c} {p*100:.0f}%" for c, p in live_top3),
+                              flush=True)
+                    shown_txt = self.clases[pred_idx]
+                    shown_conf = conf
+                    if conf >= COMMIT_CONF_SEG:
+                        commit = (shown_txt, shown_conf)
+                        estado = ESPERA
+                        print(f"[seña] {shown_txt}  ({shown_conf*100:.0f}%)", flush=True)
+                    else:
+                        # confianza baja: probablemente una transicion.
+                        estado = DETECTANDO
+                        # Segmento largo (seña repetida o sin pausa): buscar
+                        # las señas nuevas dentro, por ventanas.
+                        if dur_util >= MS_SEG_LARGO and self.senas_nuevas.clases:
+                            lanzar_ventanas(list(fds_seg), list(ts_seg))
+                        print(f"[seg descartado] {shown_txt} ({shown_conf*100:.0f}%)",
+                              flush=True)
+            reset_segmento()
+            return commit
 
         try:
             while self._running:
@@ -461,26 +669,59 @@ class Engine:
                                 "msg": f"No se pudo cargar el modelo '{pend}'.",
                             })
 
+                # Cambio de camara solicitado (p.ej. desde Ajustes): se fuerza
+                # a soltar el dispositivo actual para que se reabra mas abajo
+                # con el indice nuevo, aunque siga habiendo consumidores.
+                with self._cam_lock:
+                    pend_cam = self._pending_cam_index
+                    self._pending_cam_index = None
+                if pend_cam is not None and pend_cam != self.cam_index:
+                    self.cam_index = pend_cam
+                    if cap is not None:
+                        cap.release()
+                        cap = None
+                        self._camara_ok = False
+                    full_reset()
+                    print(f"[engine] camara cambiada a indice {pend_cam}", flush=True)
+                    self.broadcast({"tipo": "camara", "actual": pend_cam})
+
                 # Sin consumidores: liberar camara y dormir.
                 if not self.active:
                     if cap is not None:
                         cap.release()
                         cap = None
                         self._camara_ok = False
-                    if hands is not None:
-                        try:
-                            hands.close()
-                        except Exception:
-                            pass
-                        hands = None
+                    # `hands` (el grafo de MediaPipe) se conserva entre sesiones:
+                    # crearlo cuesta ~2.5 s y se notaba cada vez que se abría la
+                    # cámara. Es uno solo, así que no acumula memoria.
                     full_reset()
                     with self._jpeg_lock:
                         self._jpeg = None
+                    # Precalentar: se crea una sola vez mientras nadie usa la
+                    # cámara (al arrancar), así la primera apertura ya es rápida.
+                    if hands is None and not getattr(self, "_precalentado", False):
+                        self._precalentado = True  # un solo intento; si falla, se crea al abrir
+                        try:
+                            hands = crear_hands(num_manos=NUM_MANOS, modo_estatico=False)
+                        except Exception as e:
+                            print(f"[engine] no se pudo precrear MediaPipe: {e}", flush=True)
+                            hands = None
                     time.sleep(IDLE_SLEEP)
                     continue
 
                 if cap is None:
-                    cap = cv2.VideoCapture(CAM_INDEX)
+                    # CAP_DSHOW: en Windows, el backend por defecto (MSMF) puede
+                    # tardar varios segundos en abrir y negociar resolucion —
+                    # el usuario ve el traductor "sin aparecer" ese rato.
+                    # DirectShow abre casi al instante con el mismo hardware.
+                    # (2026-11-11) Pero a 1280x720 DirectShow entrega ~8 fps en
+                    # esta webcam (medido) contra 30 de MSMF: con 8 fps las
+                    # señas con movimiento salen borrosas y a saltos. Se usa
+                    # MSMF; SIGNAI_DSHOW=1 vuelve a DirectShow.
+                    usar_dshow = os.name == "nt" and os.environ.get("SIGNAI_DSHOW") == "1"
+                    cap = (cv2.VideoCapture(self.cam_index, cv2.CAP_DSHOW) if usar_dshow
+                           else cv2.VideoCapture(self.cam_index, cv2.CAP_MSMF) if os.name == "nt"
+                           else cv2.VideoCapture(self.cam_index))
                     cap.set(cv2.CAP_PROP_FRAME_WIDTH, ANCHO_CAM)
                     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, ALTO_CAM)
                     # Comprobar la camara ANTES de construir el grafo de MediaPipe:
@@ -538,21 +779,29 @@ class Engine:
                 # Features en el mismo espacio de coords con que se entreno el
                 # modelo activo (image | world); si no, la geometria no coincide.
                 coords = coords_de_modelo(self.modelo_actual or "", self.meta)
-                r_pts = manos["Right"][coords] if manos.get("Right") else None
-                l_pts = manos["Left"][coords] if manos.get("Left") else None
+                manos_m = mano_para_modelo(manos)
+                r_pts = manos_m["Right"][coords] if manos_m.get("Right") else None
+                l_pts = manos_m["Left"][coords] if manos_m.get("Left") else None
                 hand_present = (r_pts is not None) or (l_pts is not None)
                 feat = features_frame(r_pts, l_pts)
+                fd = corregir_intercambio(frame_dict(manos), ultimas_munecas)
 
                 # Movimiento entre frames sobre coords de imagen (rango 0..1, el
                 # mismo espacio en que se calibraron los umbrales del grabador).
+                # Se usan las manos ya corregidas: con dos manos MediaPipe a veces
+                # intercambia Derecha/Izquierda y eso parecia un salto enorme
+                # (la seña nunca se daba por "quieta").
                 pts_img = {
-                    "Right": manos["Right"]["image"] if manos.get("Right") else None,
-                    "Left": manos["Left"]["image"] if manos.get("Left") else None,
+                    "Right": fd["Right"]["image"] if fd.get("Right") else None,
+                    "Left": fd["Left"]["image"] if fd.get("Left") else None,
                 }
                 mov = movimiento_global(pts_img_prev, pts_img) if pts_img_prev else 0.0
+                tenia_prev = pts_img_prev is not None
                 pts_img_prev = pts_img if hand_present else None
 
                 ahora = ahora_ms()
+                if hand_present and tenia_prev:
+                    ruido.agregar(ahora, mov)
                 frame_count += 1
                 commit_ahora = None
                 modo = modo_de_modelo(self.modelo_actual or "")
@@ -562,6 +811,12 @@ class Engine:
                     if estado != IDLE:
                         if sin_mano_desde_ms is None:
                             sin_mano_desde_ms = ahora
+                        elif (grabando and ahora - sin_mano_desde_ms
+                                >= MS_QUIETUD_PARA_FIN):
+                            # Bajo las manos al terminar: la seña acabo ahi
+                            # (antes se tiraba sin clasificar).
+                            commit_ahora = cerrar_segmento(
+                                sin_mano_desde_ms + MS_MARGEN_TRIM, ahora)
                         elif ahora - sin_mano_desde_ms > HAND_GONE_MS_RESET:
                             # La letra verde persiste; emitida se limpia para que la
                             # misma senia, repetida en un gesto nuevo, vuelva a
@@ -610,18 +865,21 @@ class Engine:
                     # --- segmentacion por movimiento (senias dinamicas) ---
                     if usa_segmento and estado in (DETECTANDO, ESPERA):
                         if not grabando:
-                            pre_buffer.append((feat, ahora))
-                            if mov > UMBRAL_MOVIMIENTO and ahora >= cooldown_hasta_ms:
+                            pre_buffer.append((feat, ahora, fd))
+                            if mov > ruido.inicio and ahora >= cooldown_hasta_ms:
                                 mov_seguidos += 1
                             else:
                                 mov_seguidos = 0
                             if mov_seguidos >= MOV_START_FRAMES:
                                 # arranca la senia: se conservan los frames previos
                                 grabando = True
+                                if DEBUG_SEG:
+                                    print("[debug] inicio de segmento", flush=True)
                                 quietud_desde_ms = None
                                 mov_seguidos = 0
-                                seg_feats[:] = [f for f, _ in pre_buffer]
-                                seg_ts[:] = [t for _, t in pre_buffer]
+                                seg_feats[:] = [f for f, _, _ in pre_buffer]
+                                seg_ts[:] = [t for _, t, _ in pre_buffer]
+                                seg_fds[:] = [d for _, _, d in pre_buffer]
                                 seg_movs[:] = [mov]
                                 estado = DETECTANDO
                                 if modo == "combinado":
@@ -629,10 +887,14 @@ class Engine:
                                     pred_history.clear()
                         else:
                             seg_feats.append(feat)
+                            seg_fds.append(fd)
                             seg_ts.append(ahora)
                             seg_movs.append(mov)
 
-                            if mov < UMBRAL_QUIETUD_DINAMICO:
+                            # Promedio de los ultimos frames: el temblor de
+                            # MediaPipe daba picos sueltos que reiniciaban la
+                            # quietud y la seña no se cerraba hasta los 6 s.
+                            if float(np.mean(seg_movs[-4:])) < ruido.quietud:
                                 if quietud_desde_ms is None:
                                     quietud_desde_ms = ahora
                             else:
@@ -646,53 +908,23 @@ class Engine:
                             fin_por_maximo = dur_ms >= SEG_MAX_DINAMICO * 1000
 
                             if fin_por_quietud or fin_por_maximo:
-                                feats_seg = seg_feats
-                                ts_seg = seg_ts
                                 if fin_por_quietud:
                                     # recorta la cola de quietud dejando un margen
                                     limite = quietud_desde_ms + MS_MARGEN_TRIM
-                                    k = sum(1 for t in seg_ts if t <= limite)
-                                    feats_seg = seg_feats[:k]
-                                    ts_seg = seg_ts[:k]
-                                dur_util = (
-                                    (ts_seg[-1] - ts_seg[0]) if feats_seg else 0
-                                )
-                                # Un segmento sin movimiento real fue temblor, no
-                                # una senia: se descarta sin clasificar.
-                                movio = (
-                                    len(seg_movs) > 0
-                                    and float(np.mean(seg_movs)) >= UMBRAL_QUIETUD_DINAMICO
-                                    and float(np.max(seg_movs)) >= UMBRAL_MOVIMIENTO
-                                )
-                                if (movio and len(feats_seg) >= 2
-                                        and dur_util >= SEG_MIN_DINAMICO * 1000):
-                                    feats_seg = resamplear_a_fps(
-                                        feats_seg, ts_seg, FPS_OBJETIVO)
-                                    X, mask = construir_tensor(feats_seg)
-                                    pred_idx, conf, probs = inferir_tta(
-                                        self.model, X, mask, self.device)
-                                    top_idx = np.argsort(-probs)[:3]
-                                    live_top3 = [[self.clases[i], float(probs[i])]
-                                                 for i in top_idx]
-                                    shown_txt = self.clases[pred_idx]
-                                    shown_conf = conf
-                                    cooldown_hasta_ms = ahora + MS_COOLDOWN_SEGMENTO
-                                    if conf >= COMMIT_CONF_SEG:
-                                        commit_ahora = (shown_txt, shown_conf)
-                                        estado = ESPERA
-                                        print(f"[seña] {shown_txt}  "
-                                              f"({shown_conf*100:.0f}%)", flush=True)
-                                    else:
-                                        # confianza baja: probablemente una
-                                        # transicion, no una senia; no se comete.
-                                        estado = DETECTANDO
-                                        print(f"[seg descartado] {shown_txt} "
-                                              f"({shown_conf*100:.0f}%)", flush=True)
-                                # segmento demasiado corto o sin movimiento real
-                                # (temblor): se descarta sin clasificar.
-                                reset_segmento()
+                                else:
+                                    limite = None
+                                commit_ahora = cerrar_segmento(limite, ahora) or commit_ahora
 
                 self._set_jpeg(frame)
+
+                if resultado_ventanas[0] is not None and commit_ahora is None:
+                    sena_v, conf_v = resultado_ventanas[0]
+                    resultado_ventanas[0] = None
+                    shown_txt, shown_conf = sena_v, conf_v
+                    live_top3 = [[sena_v, conf_v]]
+                    commit_ahora = (sena_v, conf_v)
+                    print(f"[seña nueva] {sena_v}  ({conf_v*100:.0f}%) [ventanas]",
+                          flush=True)
 
                 if commit_ahora is not None:
                     self.broadcast({
@@ -834,6 +1066,59 @@ async def cambiar_modelo(modelo: str, request: Request):
     return JSONResponse({"ok": True, "modelo": modelo})
 
 
+@app.get("/camaras")
+async def camaras():
+    # Bloqueante (abre/cierra hasta 6 dispositivos): fuera del hilo del loop
+    # para no congelar /health ni los WS mientras se prueba. Si el motor
+    # tiene la camara activa ahora mismo, ese indice no se vuelve a abrir
+    # (ver el porque en listar_camaras).
+    saltar = engine.cam_index if engine.active else None
+    disponibles = await asyncio.to_thread(listar_camaras, saltar)
+    return JSONResponse({"camaras": disponibles, "actual": engine.cam_index})
+
+
+@app.post("/camara")
+async def cambiar_camara(indice: int, request: Request):
+    if not autorizado(request.headers, request.query_params):
+        return JSONResponse({"ok": False, "msg": "No autorizado."}, status_code=403)
+    if not engine.set_camara(indice):
+        return JSONResponse({"ok": False, "msg": "Índice de cámara inválido."}, status_code=400)
+    return JSONResponse({"ok": True, "indice": indice})
+
+
+@app.get("/ensenar")
+async def ensenar_estado():
+    return JSONResponse({
+        "senas": engine.senas_nuevas.clases,
+        "tomas": engine.senas_nuevas.tomas_usuario(),
+        "activa": engine.ensenar,
+    })
+
+
+@app.post("/ensenar")
+async def ensenar(request: Request, sena: str = ""):
+    """sena="<NOMBRE>" empieza a guardar tomas de esa seña; vacio, termina."""
+    if not autorizado(request.headers, request.query_params):
+        return JSONResponse({"ok": False, "msg": "No autorizado."}, status_code=403)
+    if sena and sena not in engine.senas_nuevas.clases:
+        return JSONResponse({"ok": False, "msg": f"No conozco la seña '{sena}'."},
+                            status_code=404)
+    engine.ensenar = sena or None
+    return JSONResponse({"ok": True, "activa": engine.ensenar})
+
+
+@app.post("/ensenar/borrar")
+async def ensenar_borrar(request: Request, sena: str = ""):
+    """Borra las tomas propias de una seña (o de todas si sena="")."""
+    if not autorizado(request.headers, request.query_params):
+        return JSONResponse({"ok": False, "msg": "No autorizado."}, status_code=403)
+    engine.senas_nuevas.borrar_tomas(sena or None)
+    return JSONResponse({"ok": True, "tomas": engine.senas_nuevas.tomas_usuario()})
+
+
+_video_generacion = 0
+
+
 @app.get("/video")
 async def video(request: Request):
     if not autorizado(request.headers, request.query_params):
@@ -845,9 +1130,26 @@ async def video(request: Request):
         # contador subia para siempre, la camara se quedaba abierta y ninguna
         # otra pantalla podia usarla. useSignServer pide /video?t=... en cada
         # reconexion, asi que ese camino se recorre a menudo.
+        #
+        # (2026-11-12) Solo vive el /video MAS NUEVO. La app muestra una sola
+        # camara a la vez, pero Chromium no cortaba el stream al cerrar el
+        # traductor: cada apertura dejaba una conexion colgada (un consumidor
+        # mas, camara siempre encendida) y a la sexta se agotaba el limite de
+        # 6 conexiones por servidor del navegador y la app se trababa. Al
+        # cerrar aqui los streams viejos, el navegador recupera la conexion
+        # aunque el cliente no la suelte.
+        global _video_generacion
+        _video_generacion += 1
+        mia = _video_generacion
         engine.add_consumer()
         try:
-            while True:
+            ultimo_chequeo = 0.0
+            while _video_generacion == mia:
+                ahora = time.monotonic()
+                if ahora - ultimo_chequeo > 1.0:
+                    ultimo_chequeo = ahora
+                    if await request.is_disconnected():
+                        break
                 jpeg = engine.get_jpeg()
                 if jpeg is not None:
                     yield (b"--frame\r\n"
@@ -894,6 +1196,10 @@ async def ws(websocket: WebSocket):
         with engine._ws_lock:
             engine.ws_queues.discard(q)
         engine.remove_consumer()
+        if not engine.active:
+            # Se cerro la pantalla a media enseñanza: que el traductor vuelva
+            # a traducir la proxima vez.
+            engine.ensenar = None
 
 
 if __name__ == "__main__":

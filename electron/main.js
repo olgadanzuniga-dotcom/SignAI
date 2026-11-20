@@ -93,9 +93,16 @@ function startInferenceServer() {
         env: { ...process.env, SIGNAI_TOKEN: tokenServidor },
       });
     } else {
-      const script = path.join(__dirname, "../Avances/Modelo Transformer/SignAI Server.py");
-      serverProc = spawn("py", [script], {
-        cwd: path.join(__dirname, "../Avances/Modelo Transformer"),
+      const carpeta = path.join(__dirname, "../Avances/Modelo Transformer");
+      const script = path.join(carpeta, "SignAI Server.py");
+      // (2026-11-12) Preferir el Python del proyecto: el del sistema (`py`)
+      // trae MediaPipe con un protobuf incompatible y el motor truena al
+      // crear el detector de manos (la cámara nunca aparecía). venv310 es el
+      // mismo entorno con que se arma el instalador.
+      const venv = path.join(carpeta, "venv310", "Scripts", "python.exe");
+      const python = fs.existsSync(venv) ? venv : "py";
+      serverProc = spawn(python, [script], {
+        cwd: carpeta,
         windowsHide: true,
         env: { ...process.env, SIGNAI_TOKEN: tokenServidor },
       });

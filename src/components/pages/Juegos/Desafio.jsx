@@ -3,17 +3,23 @@ import { StopCircle, Timer, CheckCircle, XCircle, ScanLine } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion";
 import useSignServer from "../../../hooks/useSignServer";
 import useCerrarSidebar from "../../../hooks/useCerrarSidebar";
+import useAudioJuego from "../../../hooks/useAudioJuego";
+import { registrarRespuesta, usePartidaTerminada } from "../../../utils/progreso";
+import { sonar } from "../../../utils/sonidos";
 import {
   palabrasDesafio,
   senasEstaticas,
   senasDinamicas,
 } from "../../../data/palabras";
 import PageHeader from "../../common/PageHeader";
+import FondoJuego from "../../common/FondoJuego";
 import Tutorial from "../../common/Tutorial";
 import PageLayout from "../../common/PageLayout";
 import GameOverCard from "../../common/GameOverCard";
 import CameraStartScreen from "../../common/CameraStartScreen";
 import ServerStatusOverlay from "../../common/ServerStatusOverlay";
+import VideoMotor from "../../common/VideoMotor";
+import { tr } from "../../../i18n";
 
 const TIEMPO_POR_SENA = 20;
 
@@ -50,8 +56,27 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
   const [estadoRonda, setEstadoRonda] = useState("esperando");
   const [tiempoRestante, setTiempoRestante] = useState(TIEMPO_POR_SENA);
   const [puntaje, setPuntaje] = useState(0);
+  const audio = useAudioJuego();
 
   useCerrarSidebar(setSidebarOpen);
+  // `rondas` se define más abajo (depende del modelo); para la partida basta
+  // el total que quedó al terminar, que se lee del ref.
+  const totalRondasRef = useRef(0);
+  usePartidaTerminada(
+    "desafio",
+    estadoRonda === "terminado" || estadoRonda === "fracaso",
+    puntaje,
+    Math.max(totalRondasRef.current, puntaje, 1)
+  );
+
+  // Se acabó el tiempo / se rindió, o completó todas las rondas.
+  useEffect(() => {
+    if (estadoRonda === "fracaso") {
+      sonar("error");
+      registrarRespuesta(objetivoRef.current, false);
+    }
+    if (estadoRonda === "terminado") sonar("fin");
+  }, [estadoRonda]);
 
   // El acierto lo confirma el servidor de inferencia: cuando el modelo emite
   // un commit cuya seña coincide con el objetivo de la ronda, avanzamos.
@@ -89,6 +114,7 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
     if (modelo === "dinamico") return palabrasDesafio.filter((p) => senasDinamicas.has(p));
     return palabrasDesafio;
   }, [modelo]);
+  totalRondasRef.current = rondas.length;
 
   // El modelo activo es estado del servidor y puede cambiar a media partida
   // (otra ventana, el selector del traductor): la lista de rondas se acorta y
@@ -126,6 +152,8 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
 
     setEstadoRonda("exito");
     setPuntaje((prev) => prev + 1);
+    registrarRespuesta(objetivo, true);
+    audio.acierto(objetivo.length > 1 ? objetivo.charAt(0) + objetivo.slice(1).toLowerCase() : objetivo);
 
     avanceRef.current = setTimeout(() => {
       if (indiceRonda + 1 < rondas.length) {
@@ -168,7 +196,8 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
       }}
     >
 
-      <PageHeader />
+      <PageHeader title={tr("Modo desafío")} />
+      <FondoJuego tono={5} tono2={7} />
 
       <div className="flex-1 w-full max-w-4xl 2xl:max-w-6xl mx-auto flex flex-col items-center justify-center">
 
@@ -190,18 +219,14 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
               <button
                 onClick={reiniciarJuego}
                 className="bg-acento text-acento-texto px-8 py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-acento-fuerte transition"
-              >
-                Volver a intentar
-              </button>
+              >{tr("Volver a intentar")}</button>
             }
           >
             <p className="text-lg sm:text-xl text-sutil mb-6">
               {estadoRonda === "fracaso" ? (
-                <>
-                  Lograste acertar <strong className="text-acento">{puntaje}</strong> señas consecutivas.
-                </>
+                <>{tr("Lograste acertar")}{" "}<strong className="text-acento">{puntaje}</strong>{" "}{tr("señas consecutivas.")}</>
               ) : (
-                <>¡Increíble! Acertaste todas las señas.</>
+                <>{tr("¡Increíble! Acertaste todas las señas.")}</>
               )}
             </p>
           </GameOverCard>
@@ -211,14 +236,14 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
 
             <div className="flex-none w-full flex justify-between items-end px-2 2xl:px-4">
               <div data-tutorial="desafio-temporizador" className="flex flex-col">
-                <span className="text-xs sm:text-sm 2xl:text-base font-bold tracking-widest text-sutil uppercase">Tiempo</span>
+                <span className="text-xs sm:text-sm 2xl:text-base font-bold tracking-widest text-sutil uppercase">{tr("Tiempo")}</span>
                 <div className={`flex items-center gap-1.5 2xl:gap-2 text-3xl sm:text-4xl 2xl:text-5xl font-black ${tiempoRestante <= 5 ? 'text-error animate-pulse' : 'text-texto'}`}>
                   <Timer className="w-7 h-7 sm:w-8 sm:h-8 2xl:w-10 2xl:h-10" />
                   0:{tiempoRestante.toString().padStart(2, '0')}
                 </div>
               </div>
               <div data-tutorial="desafio-aciertos" className="text-right">
-                <span className="text-xs sm:text-sm 2xl:text-base font-bold tracking-widest text-sutil uppercase">Aciertos</span>
+                <span className="text-xs sm:text-sm 2xl:text-base font-bold tracking-widest text-sutil uppercase">{tr("Aciertos")}</span>
                 <div className="text-3xl sm:text-4xl 2xl:text-5xl font-black text-acento leading-none">{puntaje}</div>
               </div>
             </div>
@@ -232,9 +257,9 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
               {cameraActive ? (
                 <>
                   {/* El stream MJPEG llega ya anotado (landmarks) desde el servidor */}
-                  <img
+                  <VideoMotor
                     src={videoUrl}
-                    alt="Cámara con detección de señas"
+                    alt={tr("Cámara con detección de señas")}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
 
@@ -270,8 +295,7 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
                     onClick={rendirse}
                     className="absolute top-4 right-4 bg-red-500/90 hover:bg-red-600 text-white px-4 py-2 rounded-full text-xs font-bold backdrop-blur-sm transition z-20 flex items-center gap-2 shadow-md"
                   >
-                    <StopCircle size={16} /> RENDIRSE
-                  </button>
+                    <StopCircle size={16} />{" "}{tr("RENDIRSE")}</button>
                 </>
               ) : juegoIniciado ? (
                 <ServerStatusOverlay
@@ -293,7 +317,7 @@ export default function Desafio({ sidebarOpen, setSidebarOpen }) {
 
             {/* Compactada para no robar espacio a la cámara */}
             <div data-tutorial="desafio-palabra" className="flex-none w-full bg-superficie rounded-3xl shadow-lg border border-borde py-3 2xl:py-5 flex flex-col items-center justify-center text-center">
-              <span className="text-xs 2xl:text-sm font-bold tracking-widest text-acento uppercase mb-0.5 2xl:mb-1">Haz la seña para:</span>
+              <span className="text-xs 2xl:text-sm font-bold tracking-widest text-acento uppercase mb-0.5 2xl:mb-1">{tr("Haz la seña para:")}</span>
               <AnimatePresence mode="wait">
                 <motion.h2
                   key={indiceRonda}

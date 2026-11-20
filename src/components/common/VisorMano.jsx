@@ -3,6 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Center } from "@react-three/drei";
 import { Hand } from "lucide-react";
 import ErrorBoundary from "./ErrorBoundary";
+import { tr } from "../../i18n";
 
 /**
  * Visor 3D de la mano, aislado del resto de la lección.
@@ -48,7 +49,7 @@ function SinVista3D({ motivo }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center">
       <Hand className="h-10 w-10 text-sutil" strokeWidth={1.6} />
-      <p className="text-sm font-medium text-sutil">Vista 3D no disponible</p>
+      <p className="text-sm font-medium text-sutil">{tr("Vista 3D no disponible")}</p>
       <p className="max-w-[22ch] text-xs text-sutil/80">{motivo}</p>
     </div>
   );

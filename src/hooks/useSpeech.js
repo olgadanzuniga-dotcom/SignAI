@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { guardarJSON, leerJSON } from "../utils/almacen";
+import { idiomaActual } from "../i18n";
 
 const STORAGE_KEY = "signai_voice_settings";
 
@@ -10,6 +11,9 @@ const defaults = {
   volume: 1,
   lang: "es-MX",
   voiceURI: "",
+  // Voz elegida para el modo inglés (aparte: una voz en español leyendo
+  // inglés suena muy mal).
+  voiceURIEn: "",
   elevenVoiceId: "EXAVITQu4vr4xnSDxMaL",
   elevenModel: "eleven_multilingual_v2",
   elevenStability: 0.5,
@@ -60,12 +64,15 @@ export default function useSpeech() {
 
   const pickWebVoice = useCallback(() => {
     if (!voices.length) return null;
-    if (settings.voiceURI) {
-      const exact = voices.find((v) => v.voiceURI === settings.voiceURI);
+    const en = idiomaActual() === "en";
+    const elegida = en ? settings.voiceURIEn : settings.voiceURI;
+    if (elegida) {
+      const exact = voices.find((v) => v.voiceURI === elegida);
       if (exact) return exact;
     }
-    const esVoices = voices.filter((v) => v.lang.toLowerCase().startsWith("es"));
-    return (esVoices.length ? esVoices : voices)[0];
+    const pref = en ? "en" : "es";
+    const delIdioma = voices.filter((v) => v.lang.toLowerCase().startsWith(pref));
+    return (delIdioma.length ? delIdioma : voices)[0];
   }, [voices, settings]);
 
   const stop = useCallback(() => {
@@ -86,7 +93,7 @@ export default function useSpeech() {
       u.rate = settings.rate;
       u.pitch = settings.pitch;
       u.volume = settings.volume;
-      u.lang = settings.lang;
+      u.lang = idiomaActual() === "en" ? "en-US" : settings.lang;
       const v = pickWebVoice();
       if (v) u.voice = v;
       u.onstart = () => setSpeaking(true);
@@ -172,5 +179,17 @@ export default function useSpeech() {
     [settings.provider, speakWeb, speakEleven, stop]
   );
 
-  return { voices, settings, update, speak, stop, speaking };
+  // Voz del sistema siempre, aunque en Ajustes esté ElevenLabs: los juegos
+  // leen muchas palabras cortas y cada una gastaría saldo de la cuenta y
+  // llegaría con retraso.
+  const speakLocal = useCallback(
+    (text) => {
+      if (!text) return;
+      stop();
+      speakWeb(text);
+    },
+    [speakWeb, stop]
+  );
+
+  return { voices, settings, update, speak, speakLocal, stop, speaking };
 }

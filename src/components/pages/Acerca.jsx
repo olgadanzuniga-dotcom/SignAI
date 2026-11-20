@@ -6,6 +6,7 @@ import Tutorial from "../common/Tutorial";
 import PageLayout from "../common/PageLayout";
 import ResponsiveContainer from "../common/ResponsiveContainer";
 import ContentCard from "../common/ContentCard";
+import { tr } from "../../i18n";
 
 const ACERCA_TUTORIAL_STEPS = [
   {
@@ -63,46 +64,33 @@ export default function Acerca({ sidebarOpen }) {
         }`}
       >
         <ContentCard padding="lg" className="transition-all duration-700">
-          <h1 className="text-3xl sm:text-4xl 2xl:text-5xl font-extrabold mb-5 sm:mb-6 2xl:mb-8 text-texto">
-            Acerca de nosotros
-          </h1>
+          <h1 className="text-3xl sm:text-4xl 2xl:text-5xl font-extrabold mb-5 sm:mb-6 2xl:mb-8 text-texto">{tr("Acerca de nosotros")}</h1>
 
           {/* Excepción deliberada a "sin clases dark:": aquí no se elige un
               color sino cuál de los dos archivos de logo se muestra. Va en CSS
               y no en JS para que no parpadee el logo equivocado al cargar. */}
           <img
             src={logoClaro}
-            alt="Logo SignAi Modo Claro"
+            alt={tr("Logo SignAi Modo Claro")}
             className="mx-auto mb-6 2xl:mb-8 w-full max-w-xs 2xl:max-w-sm h-auto block dark:hidden"
           />
 
           <img
             src={logoOscuro}
-            alt="Logo SignAi Modo Oscuro"
+            alt={tr("Logo SignAi Modo Oscuro")}
             className="mx-auto mb-6 2xl:mb-8 w-full max-w-xs 2xl:max-w-sm h-auto hidden dark:block"
           />
 
-          <p data-tutorial="acerca-intro" className="text-sm sm:text-base 2xl:text-lg text-sutil leading-relaxed mb-6 2xl:mb-8">
-            SignAI nace para derribar barreras de comunicación entre personas sordas y oyentes
-            mediante tecnología educativa e inteligencia artificial.
-            Creemos que aprender la Lengua de Señas Mexicana debe ser un proceso moderno,
-            intuitivo e inclusivo.
-          </p>
+          <p data-tutorial="acerca-intro" className="text-sm sm:text-base 2xl:text-lg text-sutil leading-relaxed mb-6 2xl:mb-8">{tr("SignAI nace para derribar barreras de comunicación entre personas sordas y oyentes mediante tecnología educativa e inteligencia artificial. Creemos que aprender la Lengua de Señas Mexicana debe ser un proceso moderno, intuitivo e inclusivo.")}</p>
 
           <div data-tutorial="acerca-mision" className="text-left mt-6 2xl:mt-8">
-            <h2 className="text-xl sm:text-2xl 2xl:text-3xl font-bold mb-2 2xl:mb-3 text-texto">Misión</h2>
-            <p className="text-sm sm:text-base 2xl:text-lg text-sutil leading-relaxed">
-              Facilitar el aprendizaje de LSM mediante herramientas tecnológicas accesibles e
-              interactivas, promoviendo la inclusión y la comunicación efectiva.
-            </p>
+            <h2 className="text-xl sm:text-2xl 2xl:text-3xl font-bold mb-2 2xl:mb-3 text-texto">{tr("Misión")}</h2>
+            <p className="text-sm sm:text-base 2xl:text-lg text-sutil leading-relaxed">{tr("Facilitar el aprendizaje de LSM mediante herramientas tecnológicas accesibles e interactivas, promoviendo la inclusión y la comunicación efectiva.")}</p>
           </div>
 
           <div data-tutorial="acerca-vision" className="text-left mt-6 2xl:mt-8">
-            <h2 className="text-xl sm:text-2xl 2xl:text-3xl font-bold mb-2 2xl:mb-3 text-texto">Visión</h2>
-            <p className="text-sm sm:text-base 2xl:text-lg text-sutil leading-relaxed">
-              Ser la plataforma de referencia en accesibilidad e innovación tecnológica, transformando
-              la forma en que la sociedad se conecta con la Lengua de Señas Mexicana.
-            </p>
+            <h2 className="text-xl sm:text-2xl 2xl:text-3xl font-bold mb-2 2xl:mb-3 text-texto">{tr("Visión")}</h2>
+            <p className="text-sm sm:text-base 2xl:text-lg text-sutil leading-relaxed">{tr("Ser la plataforma de referencia en accesibilidad e innovación tecnológica, transformando la forma en que la sociedad se conecta con la Lengua de Señas Mexicana.")}</p>
           </div>
 
           <div className="mt-8 sm:mt-10 2xl:mt-14 flex justify-center">
@@ -111,21 +99,17 @@ export default function Acerca({ sidebarOpen }) {
                 <Mail className="w-4 h-4 sm:w-5 sm:h-5 2xl:w-6 2xl:h-6" />
               </div>
               <div className="flex flex-col text-left">
-                <span className="text-[10px] sm:text-xs 2xl:text-sm uppercase tracking-wider text-sutil">
-                  Escríbenos
-                </span>
+                <span className="text-[10px] sm:text-xs 2xl:text-sm uppercase tracking-wider text-sutil">{tr("Escríbenos")}</span>
                 <a
                   href={`mailto:${email}`}
                   className="text-xs sm:text-sm 2xl:text-base font-medium text-texto hover:text-acento transition-colors"
-                >
-                  Contacto SignAI
-                </a>
+                >{tr("Contacto SignAI")}</a>
               </div>
               <button
                 type="button"
                 onClick={handleCopy}
-                aria-label="Copiar correo"
-                title={copied ? "Copiado" : "Copiar correo"}
+                aria-label={tr("Copiar correo")}
+                title={copied ? tr("Copiado") : tr("Copiar correo")}
                 className="ml-1 sm:ml-2 inline-flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 2xl:w-11 2xl:h-11 rounded-lg text-sutil hover:text-acento hover:bg-superficie-2 transition-colors"
               >
                 {copied ? (

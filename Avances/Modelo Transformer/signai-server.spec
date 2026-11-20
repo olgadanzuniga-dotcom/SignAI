@@ -31,6 +31,12 @@ for nombre in ("unificado",):
             if os.path.isfile(ruta):
                 datas.append((ruta, os.path.join("modelos", nombre)))
 
+# Señas nuevas agregadas sin reentrenar (senas_nuevas.py): referencias
+# precalculadas por exportar_senas_nuevas.py.
+refs_nuevas = os.path.join(base, "modelos", "senas_nuevas", "refs.json")
+if os.path.isfile(refs_nuevas):
+    datas.append((refs_nuevas, os.path.join("modelos", "senas_nuevas")))
+
 a = Analysis(
     [os.path.join(base, "SignAI Server.py")],
     pathex=[base],

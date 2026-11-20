@@ -87,7 +87,9 @@ describe("señas que el modelo reconoce", () => {
 
   it("las señas del modelo son letras del alfabeto o palabras, nunca otra cosa", () => {
     for (const s of [...senasEstaticas, ...senasDinamicas]) {
-      const esPalabra = ["AGUA", "HOLA", "PERRO"].includes(s);
+      const esPalabra = [
+        "AGUA", "HOLA", "PERRO", "AMARILLO", "AZUL", "ROJO", "BUENOS", "DÍAS",
+      ].includes(s);
       expect(letrasLSM.has(s) || esPalabra, s).toBe(true);
     }
   });

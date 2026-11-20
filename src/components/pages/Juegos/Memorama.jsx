@@ -2,11 +2,14 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../common/PageHeader";
+import FondoJuego from "../../common/FondoJuego";
 import Tutorial from "../../common/Tutorial";
 import PageLayout from "../../common/PageLayout";
 import GameOverCard from "../../common/GameOverCard";
 import ProgressHeader from "../../common/ProgressHeader";
 import useCerrarSidebar from "../../../hooks/useCerrarSidebar";
+import useAudioJuego from "../../../hooks/useAudioJuego";
+import { registrarRespuesta, usePartidaTerminada } from "../../../utils/progreso";
 import { barajar } from "../../../utils/aleatorio";
 
 const MEMORAMA_TUTORIAL_STEPS = [
@@ -24,7 +27,7 @@ const MEMORAMA_TUTORIAL_STEPS = [
   },
 ];
 
-import dorsoImg from "../../../assets/reverso_carta.svg";
+import dorsoImg from "../../../assets/memorama-dorso-nueva.png";
 import elefanteImg from "../../../assets/elefante.svg";
 import elefanteLSM from "../../../assets/elefante_lsm.svg"; 
 import verdeImg from "../../../assets/verde.svg";
@@ -39,6 +42,7 @@ import mesaImg from "../../../assets/mesa.svg";
 import mesaLSM from "../../../assets/mesa_lsm.svg";
 import hamburguesaImg from "../../../assets/hamburguesa.svg";
 import hamburguesaLSM from "../../../assets/hamburguesa_lsm.svg";
+import { tr } from "../../../i18n";
 
 export default function Memorama({ sidebarOpen, setSidebarOpen }) {
   const navigate = useNavigate();
@@ -57,8 +61,16 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
   const progress = totalPairs > 0 ? Math.min(100, (matchedPairs / totalPairs) * 100) : 0;
   
   const juegoTerminado = totalPairs > 0 && matchedPairs === totalPairs;
+  const audio = useAudioJuego();
 
   useCerrarSidebar(setSidebarOpen);
+
+  useEffect(() => {
+    if (juegoTerminado) audio.fin();
+  }, [juegoTerminado, audio.fin]);
+  // En memorama la calificación es parejas / intentos (100% = sin fallar ni una).
+  // Los fallos son de memoria, no de no saber la seña: no se cuentan por palabra.
+  usePartidaTerminada("memorama", juegoTerminado, totalPairs, Math.max(intentos, totalPairs));
 
   useEffect(() => {
     const dataset = [
@@ -110,6 +122,12 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
       setIntentos((n) => n + 1);
       const [firstIdx, secondIdx] = newSelected;
       const acierto = cards[firstIdx].palabra === cards[secondIdx].palabra;
+      if (acierto) {
+        const p = cards[firstIdx].palabra;
+        audio.acierto(p.charAt(0) + p.slice(1).toLowerCase());
+      } else {
+        audio.error();
+      }
 
       timeoutRef.current = setTimeout(
         () => {
@@ -148,7 +166,8 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
         paddingInline: "clamp(0.75rem, 2.5vw, 3rem)",
       }}
     >
-      <PageHeader />
+      <PageHeader title={tr("Memorama")} />
+      <FondoJuego tono={1} tono2={4} />
 
       <div className="z-10 w-full max-w-6xl 2xl:max-w-[1500px] flex flex-col items-center">
         
@@ -159,10 +178,7 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
             onReiniciar={reiniciarJuego}
             onSalir={() => navigate(-1)}
           >
-            <p className="text-lg sm:text-xl 2xl:text-2xl text-sutil mb-8 2xl:mb-10">
-              Encontraste los <strong className="text-acento">{totalPairs}</strong> pares
-              en <strong className="text-acento">{intentos}</strong> intentos.
-              {intentos === totalPairs && " ¡Partida perfecta!"}
+            <p className="text-lg sm:text-xl 2xl:text-2xl text-sutil mb-8 2xl:mb-10">{tr("Encontraste los")}{" "}<strong className="text-acento">{totalPairs}</strong>{" "}{tr("pares en")}{" "}<strong className="text-acento">{intentos}</strong>{" "}{tr("intentos.")}{intentos === totalPairs && tr(" ¡Partida perfecta!")}
             </p>
           </GameOverCard>
         ) : (
@@ -175,24 +191,21 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
                 {
                   punto: "bg-acento",
                   contenido: (
-                    <>
-                      Pares encontrados: <span className="text-acento">{matchedPairs}</span> / {totalPairs || 7}
+                    <>{tr("Pares encontrados:")}{" "}<span className="text-acento">{matchedPairs}</span> / {totalPairs || 7}
                     </>
                   ),
                 },
                 {
                   punto: "bg-exito",
                   contenido: (
-                    <>
-                      Cartas restantes: <span className="text-exito">{cards.filter((c) => !c.matched).length}</span>
+                    <>{tr("Cartas restantes:")}{" "}<span className="text-exito">{cards.filter((c) => !c.matched).length}</span>
                     </>
                   ),
                 },
                 {
                   punto: "bg-[rgb(var(--cat-8))]",
                   contenido: (
-                    <>
-                      Intentos: <span className="text-[rgb(var(--cat-8))]">{intentos}</span>
+                    <>{tr("Intentos:")}{" "}<span className="text-[rgb(var(--cat-8))]">{intentos}</span>
                     </>
                   ),
                 },
@@ -233,7 +246,7 @@ export default function Memorama({ sidebarOpen, setSidebarOpen }) {
                         >
                           <img
                             src={dorsoImg}
-                            alt="Dorso"
+                            alt={tr("Dorso")}
                             className="w-full h-full object-cover"
                           />
                         </div>
